@@ -1,0 +1,14 @@
+{
+  "name": "reefer-power",
+  "version": "1.0.0",
+  "description": "冷藏箱岸电接入与断电迁移模块",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>岸桥作业许可 · 装船波次互锁调度台</title>
+<style>
+  :root{
+    --bg:#0f1623; --panel:#172033; --panel2:#1d2942; --line:#2b3a57;
+    --text:#e7edf7; --muted:#92a1bd; --accent:#4da3ff; --ok:#36c46a;
+    --warn:#f5b544; --bad:#ef5f67; --purple:#a98bff; --cyan:#4fd1c5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:13px/1.5 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--text)}
+  header{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--panel);
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  .pill{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:2px 10px;color:var(--muted)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+  main{padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:1500px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .card h2{font-size:13px;margin:0 0 10px;color:var(--accent);font-weight:600;display:flex;
+           justify-content:space-between;align-items:center}
+  .span2{grid-column:span 2}
+  table{border-collapse:collapse;width:100%}
+  td,th{padding:3px 7px;text-align:left;border-bottom:1px solid #223049;font-size:12px}
+  th{color:var(--muted);font-weight:500}
+  .muted{color:var(--muted)}
+  button{background:var(--accent);color:#06152a;border:0;border-radius:6px;padding:5px 12px;
+         font-size:12px;font-weight:600;cursor:pointer}
+  button.sec{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  button.warn{background:var(--warn);color:#2a1c00}
+  button.bad{background:var(--bad);color:#fff}
+  button.ok{background:var(--ok);color:#05230f}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select{background:#0d1422;border:1px solid var(--line);color:var(--text);
+               border-radius:6px;padding:5px 8px;font-size:12px}
+  label{color:var(--muted);font-size:11px;display:block;margin:4px 0 2px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+  .tag{font-size:11px;border-radius:4px;padding:1px 7px;display:inline-block}
+  .t-active{background:rgba(54,196,106,.18);color:var(--ok)}
+  .t-suspended{background:rgba(245,181,68,.18);color:var(--warn)}
+  .t-revoked,.t-voided{background:rgba(239,95,103,.18);color:var(--bad)}
+  .t-released{background:#2a3550;color:var(--muted)}
+  .t-in_progress{background:rgba(77,163,255,.18);color:var(--accent)}
+  .t-completed{background:rgba(54,196,106,.18);color:var(--ok)}
+  .t-released-wave{background:#2a3550;color:var(--muted)}
+  /* 时间轴 */
+  .tl-wrap{overflow-x:auto}
+  .tl{position:relative;min-width:760px}
+  .tl-row{display:grid;grid-template-columns:90px 1fr;align-items:center;height:44px;gap:8px}
+  .tl-crane{color:var(--muted);font-size:12px}
+  .tl-track{position:relative;height:34px;background:repeating-linear-gradient(90deg,#121b2c 0,#121b2c 1px,transparent 1px,transparent 12.5%);
+            border-bottom:1px solid var(--line)}
+  .tl-bar{position:absolute;height:24px;top:5px;border-radius:5px;padding:3px 8px;font-size:11px;
+          white-space:nowrap;overflow:hidden;border:1px solid rgba(255,255,255,.18);cursor:default}
+  .tl-now{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.85;z-index:5}
+  .tl-axis{display:grid;grid-template-columns:90px 1fr;gap:8px;color:var(--muted);font-size:10px;margin-top:2px}
+  .hatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+  .hatch-cell{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px}
+  .hatch-cell.conflict{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad) inset}
+  .stack{margin:6px 0;padding:7px;background:var(--panel2);border-radius:8px;border:1px solid var(--line)}
+  .stack .stk-title{color:var(--muted);font-size:11px;margin-bottom:5px}
+  .boxes{display:flex;gap:6px;flex-wrap:wrap}
+  .box{min-width:88px;border-radius:7px;padding:5px 8px;border:1px solid var(--line);background:#121b2c;font-size:11px}
+  .box.executed{border-color:var(--ok);background:rgba(54,196,106,.12)}
+  .box.blocked{border-color:var(--warn);background:rgba(245,181,68,.08)}
+  .box.workable{border-color:var(--accent)}
+  .box.released{opacity:.55}
+  .box .b-id{font-weight:600}
+  .box .b-sub{color:var(--muted);font-size:10px}
+  .bar{height:7px;border-radius:4px;background:#243150;overflow:hidden;margin-top:5px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan))}
+  .permits{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+  .permit{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+  .permit.conflict{border-color:var(--bad)}
+  .permit .pid{font-weight:700}
+  .kv{color:var(--muted)}
+  .kv b{color:var(--text);font-weight:500}
+  #toast{position:fixed;right:18px;bottom:18px;max-width:480px;z-index:50}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);
+         border-radius:8px;padding:9px 13px;margin-top:8px;font-size:12px;white-space:pre-wrap}
+  .toast.err{border-left-color:var(--bad)}
+  .toast.ok{border-left-color:var(--ok)}
+  .exc{border:1px solid #4a3040;background:#241826;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .exc .reason{color:var(--bad);font-weight:600}
+  .inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  details summary{cursor:pointer;color:var(--muted);font-size:11px;margin-top:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>岸桥作业许可 · 装船波次互锁调度台</h1>
+  <span class="pill" id="server-time">—</span>
+  <span class="pill"><span class="dot" style="background:var(--ok)"></span><span id="verify-state">自检…</span></span>
+  <span class="pill">
+    模拟当前时间
+    <input type="datetime-local" id="now-input" step="60" style="margin-left:6px;width:175px">
+    <button class="sec" onclick="clearNow()">实际</button>
+  </span>
+  <button class="sec" onclick="loadAll()">刷新</button>
+</header>
+
+<main>
+  <!-- 时间轴 -->
+  <section class="card span2">
+    <h2>时间轴 · 岸桥许可有效时段 <span class="muted" id="tl-range"></span></h2>
+    <div class="tl-wrap"><div class="tl" id="timeline"></div></div>
+    <div class="tl-axis"><span></span><div id="tl-ticks" style="position:relative;height:14px"></div></div>
+  </section>
+
+  <!-- 舱区占用 -->
+  <section class="card">
+    <h2>舱区占用 <span class="muted">同一时段相邻/同舱不得分授不同岸桥</span></h2>
+    <div class="hatch-grid" id="hatch-grid"></div>
+  </section>
+
+  <!-- 授权异常 -->
+  <section class="card">
+    <h2>授权异常队列 <span class="muted" id="exc-count"></span></h2>
+    <div id="exceptions"></div>
+  </section>
+
+  <!-- 波次 / 前置阻塞 -->
+  <section class="card span2">
+    <h2>波次 · 堆叠前置阻塞 · 箱归属与执行进度</h2>
+    <div id="waves"></div>
+  </section>
+
+  <!-- 许可 -->
+  <section class="card span2">
+    <h2>岸桥许可 <span class="muted">修订号即乐观锁；转交后已执行箱留原许可，未执行箱整体迁移</span></h2>
+    <div class="permits" id="permits"></div>
+  </section>
+
+  <!-- 建许可 -->
+  <section class="card">
+    <h2>授予许可（拆波次后分配舱区/箱集合/时段）</h2>
+    <div class="row">
+      <div><label>波次</label><select id="g-wave"></select></div>
+      <div><label>岸桥</label><input id="g-crane" placeholder="QC-1" style="width:90px"></div>
+      <div><label>舱区(逗号)</label><input id="g-hatches" placeholder="H1,H2" style="width:110px"></div>
+      <div><label>生效</label><input type="datetime-local" id="g-from" step="60"></div>
+      <div><label>失效</label><input type="datetime-local" id="g-to" step="60"></div>
+      <div><label>箱集合(留空=舱区内未授权箱)</label><input id="g-boxes" placeholder="C-S1-0,..." style="width:180px"></div>
+      <button onclick="grantPermit()">授予</button>
+    </div>
+  </section>
+
+  <!-- 拆波次 -->
+  <section class="card">
+    <h2>把已发布方案拆成波次</h2>
+    <div class="row">
+      <div><label>已发布方案</label><select id="w-plan"></select></div>
+      <div><label>波次名</label><input id="w-name" placeholder="夜班波次" style="width:130px"></div>
+      <div><label>箱集合(留空=全部)</label><input id="w-boxes" style="width:200px" placeholder="C-S1-0,C-S1-1"></div>
+      <button onclick="publishWave()">发布波次</button>
+    </div>
+  </section>
+
+  <!-- 扫描 -->
+  <section class="card">
+    <h2>码头扫描装船 <span class="muted">必须携带许可编号 + 修订号</span></h2>
+    <div class="row">
+      <div><label>许可编号</label><input id="s-permit" placeholder="PMT-A" style="width:110px"></div>
+      <div><label>修订号</label><input id="s-rev" type="number" value="1" style="width:70px"></div>
+      <div><label>箱号</label><input id="s-box" placeholder="C-S1-0" style="width:110px"></div>
+      <div><label>实际槽位</label><input id="s-slot" placeholder="02-01-01" style="width:100px"></div>
+      <div><label>手持终端</label><input id="s-scanner" value="HH-01" style="width:80px"></div>
+      <button class="ok" onclick="doScan()">扫描确认</button>
+    </div>
+    <div id="scan-result" style="margin-top:8px"></div>
+  </section>
+
+  <!-- 装船记录 -->
+  <section class="card">
+    <h2>装船记录</h2>
+    <table><thead><tr><th>时间</th><th>箱</th><th>许可</th><th>修订</th><th>波次</th><th>终端</th></tr></thead>
+      <tbody id="scans"></tbody></table>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let BOARD = null;
+
+function curNow(){
+  const v = $("now-input").value;
+  if(!v) return null;
+  // datetime-local 按本地时区解释；页面演示统一打 +08:00
+  return v.length===16 ? v.replace("T","T") + ":00+08:00" : v + "+08:00";
+}
+function clearNow(){ $("now-input").value=""; loadAll(); }
+function fmt(t){ return t ? t.replace("+08:00","").replace("T"," ").slice(5,16) : "—"; }
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function hms(t){ return t ? t.slice(11,16) : ""; }
+
+async function api(method, path, body, idem){
+  const headers = {"Content-Type":"application/json"};
+  const n = curNow(); if(n) headers["X-Now"] = n;
+  if(idem) headers["Idempotency-Key"] = idem;
+  const res = await fetch(path, {method, headers,
+    body: body!==undefined ? JSON.stringify(body) : undefined});
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw Object.assign(new Error((data.error&&data.error.message)||res.status),
+    {status:res.status, err:data.error});
+  return data;
+}
+function toast(msg, kind){
+  const d=document.createElement("div"); d.className="toast "+(kind||"");
+  d.textContent=msg; $("toast").appendChild(d);
+  setTimeout(()=>d.remove(), kind==="err"?9000:5000);
+}
+function uuid(){ return "ui-"+crypto.randomUUID(); }
+
+const STATUS_CN = {active:"有效", suspended:"暂停", revoked:"撤销",
+  released:"未开始", in_progress:"进行中", completed:"已完成",
+  transferred:"已转交", restored:"已恢复", voided:"已作废", open:"待处置"};
+const CRANE_COLORS = {"QC-1":"#3b6fd4","QC-2":"#0f9d8f","QC-3":"#8a5cf0","QC-4":"#d4842b"};
+function craneColor(c){ return CRANE_COLORS[c] || "#5a6f96"; }
+
+async function loadAll(){
+  try{
+    BOARD = await api("GET","/api/board");
+    render();
+  }catch(e){ $("verify-state").textContent = "服务未连接"; toast(e.message,"err"); }
+}
+
+function render(){
+  const b = BOARD;
+  $("server-time").textContent = "服务器时间 " + fmt(b.now);
+  $("verify-state").textContent = "已加载";
+  renderTimeline(b.schedule);
+  renderHatches(b.schedule);
+  renderExceptions(b.exceptions);
+  renderWaves(b.waves);
+  renderPermits(b.schedule.permits);
+  renderScans(b);
+  fillSelectors(b);
+}
+
+function renderTimeline(sched){
+  const perms = sched.permits;
+  if(!perms.length){ $("timeline").innerHTML='<div class="muted">尚无许可</div>'; $("tl-ticks").innerHTML=""; return; }
+  let min = Math.min(...perms.map(p=>+new Date(p.valid_from)));
+  let max = Math.max(...perms.map(p=>+new Date(p.valid_to)));
+  const now = +new Date(sched.now);
+  min = Math.min(min, now - 1800e3); max = Math.max(max, now + 1800e3);
+  const span = max-min || 1;
+  const x = t => (new Date(t)-min)/span*100;
+  const cranes = [...new Set(perms.map(p=>p.crane_id))].sort();
+  $("timeline").innerHTML = cranes.map(c=>{
+    const bars = perms.filter(p=>p.crane_id===c).map(p=>{
+      const l=x(p.valid_from), w=Math.max(x(p.valid_to)-l,1.5);
+      const op = p.status==="suspended"?.65 : p.status==="revoked"?.3 : .92;
+      return `<div class="tl-bar" title="${esc(p.id)} r${p.revision} ${p.status} ${esc(p.hatches.join(","))} ${hms(p.valid_from)}-${hms(p.valid_to)}"
+        style="left:${l}%;width:${w}%;background:${craneColor(c)};opacity:${op}">
+        ${esc(p.id)}·r${p.revision} ${esc(p.hatches.join("/"))}
+        <span class="muted" style="color:#cfe0ff">${hms(p.valid_from)}-${hms(p.valid_to)}</span></div>`;
+    }).join("");
+    return `<div class="tl-row"><div class="tl-crane">${esc(c)}</div><div class="tl-track">${bars}</div></div>`;
+  }).join("") + (()=>{ const lx=x(sched.now); return lx>=0&&lx<=100 ?
+      `<div class="tl-now" style="left:${lx}%"></div>`:"";})();
+  $("tl-range").textContent = fmt(new Date(min).toISOString()) + " ~ " + fmt(new Date(max).toISOString());
+  let ticks="";
+  for(let i=0;i<=8;i++){
+    const t=new Date(min+span*i/8);
+    ticks += `<span style="position:absolute;left:${i/8*100}%;transform:translateX(-50%)">${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}</span>`;
+  }
+  $("tl-ticks").innerHTML = ticks;
+}
+
+function renderHatches(sched){
+  const conflicts = sched.conflicts;
+  const hatchMap = {};
+  sched.occupancy.forEach(o=>{ (hatchMap[o.hatch] ??= []).push(o); });
+  const allHatches = Object.keys(hatchMap).sort();
+  $("hatch-grid").innerHTML = allHatches.length ? allHatches.map(h=>{
+    const grants = hatchMap[h];
+    const inConflict = new Set();
+    conflicts.forEach(c=>{ if(c.hatch_a===h) inConflict.add(c.permit_a); if(c.hatch_b===h) inConflict.add(c.permit_b); });
+    const rows = grants.map(g=>`
+      <tr class="${g.status==="revoked"?"muted":""}">
+        <td><b>${esc(g.permit_id)}</b> r${g.revision}</td>
+        <td><span class="dot" style="background:${craneColor(g.crane_id)}"></span>${esc(g.crane_id)}</td>
+        <td>${hms(g.valid_from)}-${hms(g.valid_to)}</td>
+        <td><span class="tag t-${g.status}">${STATUS_CN[g.status]}</span></td></tr>`).join("");
+    return `<div class="hatch-cell ${inConflict.size?"conflict":""}">
+      <b>舱区 ${esc(h)}</b> ${inConflict.size?'<span class="tag t-revoked">冲突</span>':""}
+      <table><tbody>${rows}</tbody></table></div>`;
+  }).join("") : '<div class="muted">尚无舱区占用</div>';
+}
+
+function renderExceptions(excs){
+  const open = excs.filter(e=>e.status==="open");
+  $("exc-count").textContent = `${open.length} 条待处置 / 共 ${excs.length} 条`;
+  const REASON = {UNKNOWN_PERMIT:"许可不存在",STALE_REVISION:"引用旧修订",PERMIT_SUSPENDED:"许可暂停",
+    PERMIT_REVOKED:"许可撤销",PERMIT_EXPIRED:"许可过期/未生效",NOT_IN_WAVE:"箱不属于该波次",
+    OUT_OF_HATCH:"越区（箱不在许可集合）",PERMIT_RELEASED:"箱已脱离该许可"};
+  $("exceptions").innerHTML = open.length ? open.map(e=>`
+    <div class="exc">
+      <div><span class="reason">${REASON[e.reason]||e.reason}</span>
+        <span class="muted">${esc(e.detail||"")}</span></div>
+      <div class="kv" style="margin:3px 0">箱 <b>${esc(e.container_id)}</b> ·
+        引用许可 <b>${esc(e.permit_id)||"—"}</b> r${e.permit_rev??"—"} ·
+        ${esc(e.scanner_id)} · ${fmt(e.created_at)}</div>
+      <div class="inline">
+        <select id="ex-target-${e.id}"><option value="">转交目标许可…</option>
+          ${BOARD.schedule.permits.filter(p=>p.status==="active")
+            .map(p=>`<option value="${esc(p.id)}">${esc(p.id)} r${p.revision} ${esc(p.crane_id)} ${esc(p.hatches.join("/"))}</option>`).join("")}
+        </select>
+        <button class="sec" onclick="resolveExc('${e.id}','transfer')">转交</button>
+        <button class="ok" onclick="resolveExc('${e.id}','restore')">恢复原许可</button>
+        <button class="bad" onclick="resolveExc('${e.id}','void')">作废</button>
+      </div></div>`).join("")
+    : '<div class="muted">没有待处置异常</div>';
+}
+
+function boxState(b){
+  if(b.executed) return "executed";
+  if(b.blocked_by.length) return "blocked";
+  if(!b.owner_permit_id) return "released";  // 前置已满足但尚无有效许可授予
+  return "workable";
+}
+function renderWaves(waves){
+  $("waves").innerHTML = waves.map(w=>{
+    const stacks = {};
+    w.boxes.forEach(b=> (stacks[b.stack_key] ??= []).push(b));
+    const stackHtml = Object.keys(stacks).sort().map(sk=>{
+      const bs = stacks[sk].sort((a,b)=>b.stack_seq-a.stack_seq); // 视觉上顶在上
+      const hatch = bs[0].hatch_code;
+      const cells = bs.map(b=>{
+        const st = boxState(b);
+        const owner = b.executed ? b.owner_permit : (b.owner_permit_id||"");
+        return `<div class="box ${st}" title="前置: ${esc(b.prereq_ids.join(", ")||"无")}&#10;阻塞: ${esc(b.blocked_by.join(", ")||"无")}">
+          <div class="b-id">${esc(b.container_id)}</div>
+          <div class="b-sub">${ {executed:"✓ 已装",blocked:"⛔ "+esc(b.blocked_by.join(",")),
+            workable:"可作业",released:"待授权"}[st] }</div>
+          <div class="b-sub">${esc(owner||"无许可")} · ${esc(hatch)}-T${b.stack_seq}</div>
+        </div>`;
+      }).join("");
+      return `<div class="stack"><div class="stk-title">堆位 ${esc(sk)}（舱 ${esc(hatch)}，上→下）</div>
+        <div class="boxes">${cells}</div></div>`;
+    }).join("");
+    const pct = w.total? Math.round(w.executed/w.total*100):0;
+    return `<div class="stack" style="background:var(--panel2)">
+      <div class="inline" style="justify-content:space-between">
+        <b>${esc(w.name)}</b>
+        <span class="muted">${esc(w.id)} · 方案 ${esc(w.plan_id)}</span>
+        <span><span class="tag t-${w.status}">${STATUS_CN[w.status]}</span>
+          ${w.executed}/${w.total}（${pct}%）· 可作业 ${w.workable.length} · 阻塞 ${w.blocked.length}</span>
+      </div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:8px;margin-top:6px">
+        ${stackHtml}</div></div>`;
+  }).join("") || '<div class="muted">尚无波次</div>';
+}
+
+function renderPermits(perms){
+  $("permits").innerHTML = perms.length ? perms.map(p=>{
+    const conflict = BOARD.schedule.conflicts.some(c=>c.permit_a===p.id||c.permit_b===p.id);
+    const pct = p.active_boxes+p.executed_boxes ?
+      Math.round(p.executed_boxes/(p.active_boxes+p.executed_boxes)*100) : 0;
+    const actions = p.status==="active"
+      ? `<button class="warn" onclick="setPermit('${esc(p.id)}','suspend')">暂停</button>
+         <button class="bad" onclick="setPermit('${esc(p.id)}','revoke')">撤销</button>`
+      : p.status==="suspended"
+      ? `<button class="ok" onclick="setPermit('${esc(p.id)}','resume')">恢复</button>
+         <button class="bad" onclick="setPermit('${esc(p.id)}','revoke')">撤销</button>` : "";
+    return `<div class="permit ${conflict?"conflict":""}">
+      <div class="inline" style="justify-content:space-between">
+        <span><span class="pid">${esc(p.id)}</span> r${p.revision}
+          <span class="dot" style="background:${craneColor(p.crane_id)}"></span>${esc(p.crane_id)}</span>
+        <span class="tag t-${p.status}">${STATUS_CN[p.status]}</span>
+      </div>
+      <div class="kv" style="margin:4px 0">舱区 <b>${esc(p.hatches.join(", "))}</b> ·
+        波次 ${esc(p.wave_name)}</div>
+      <div class="kv">时段 <b>${fmt(p.valid_from)} ~ ${fmt(p.valid_to)}</b>
+        ${p.time_state==="current"?'<span class="tag t-active">当前</span>'
+          :p.time_state==="expired"?'<span class="tag t-revoked">已过期</span>'
+          :'<span class="tag t-released-wave">未到</span>'}</div>
+      <div class="kv">已执行 <b>${p.executed_boxes}</b> / 未执行 ${p.active_boxes}（${pct}%）</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <details><summary>可作业 ${p.active_boxes?p.workable.length:0} · 前置阻塞 ${p.active_boxes?p.blocked.length:0}</summary>
+        <div style="margin-top:5px">
+          ${p.active_boxes ? (p.blocked.length?`<div class="muted">⛔ ${p.blocked.map(b=>esc(b.container_id)+"←"+esc(b.blocked_by.join(","))).join("<br>")}</div>`:"")
+             + (p.workable.length?`<div class="muted">✓ ${p.workable.map(b=>b.container_id).join(", ")}</div>`:"")
+             : '<span class="muted">（无未执行箱）</span>'}
+        </div></details>
+      <div class="inline" style="margin-top:7px">${actions}
+        <select id="tr-${esc(p.id)}" style="max-width:130px"><option value="">转交…</option>
+          ${perms.filter(q=>q.id!==p.id&&q.wave_id===p.wave_id&&q.status==="active")
+            .map(q=>`<option value="${esc(q.id)}">${esc(q.id)} r${q.revision}</option>`).join("")}
+        </select>
+        <button class="sec" onclick="transfer('${esc(p.id)}')">转交</button>
+        <button class="sec" onclick="showAdjust('${esc(p.id)}')">调整</button>
+      </div>
+      <div id="adj-${esc(p.id)}" style="display:none;margin-top:8px" class="row">
+        <div><label>期望修订号</label><input id="aj-rev-${esc(p.id)}" value="${p.revision}" style="width:62px"></div>
+        <div><label>舱区</label><input id="aj-h-${esc(p.id)}" value="${esc(p.hatches.join(","))}" style="width:100px"></div>
+        <div><label>生效</label><input type="datetime-local" id="aj-f-${esc(p.id)}" step="60" value="${toLocal(p.valid_from)}"></div>
+        <div><label>失效</label><input type="datetime-local" id="aj-t-${esc(p.id)}" step="60" value="${toLocal(p.valid_to)}"></div>
+        <button onclick="adjustPermit('${esc(p.id)}')">提交修订 r${p.revision+1}</button>
+      </div>
+    </div>`;
+  }).join("") : '<div class="muted">尚无许可</div>';
+}
+
+function toLocal(iso){
+  const d=new Date(iso), p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fromLocal(v){ return v ? v + ":00+08:00" : undefined; }
+
+function renderScans(b){
+  const rows = (b.scans||[]).slice().sort(
+    (a,b)=>(a.scanned_at||"").localeCompare(b.scanned_at||""));
+  $("scans").innerHTML = rows.length ? rows.map(s=>
+    `<tr><td>${fmt(s.scanned_at)}</td><td>${esc(s.container_id)}</td>
+      <td>${esc(s.permit_id)}</td><td>r${s.permit_rev}</td>
+      <td>${esc(s.wave_id)}</td><td class="muted">${esc(s.scanner_id)}</td></tr>`
+  ).join("") : '<tr><td colspan="6" class="muted">尚无装船记录</td></tr>';
+}
+
+function fillSelectors(b){
+  const wsel=$("g-wave");
+  if(!wsel.options.length || wsel.dataset.v!==JSON.stringify(b.waves.map(w=>w.id))){
+    wsel.innerHTML = b.waves.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("");
+    wsel.dataset.v = JSON.stringify(b.waves.map(w=>w.id));
+  }
+  const ps=$("w-plan");
+  const published=b.plans.filter(p=>p.status==="published");
+  ps.innerHTML = published.map(p=>`<option value="${esc(p.id)}">${esc(p.id)} ${esc(p.name)}</option>`).join("");
+}
+
+// ---------------- 操作 ----------------
+async function publishWave(){
+  const plan=$("w-plan").value, name=$("w-name").value||("波次-"+Date.now());
+  const ids=$("w-boxes").value.trim();
+  const body={name};
+  if(ids) body.container_ids = ids.split(",").map(s=>s.trim()).filter(Boolean);
+  try{
+    const r=await api("POST",`/api/plans/${plan}/waves`,body,uuid());
+    toast(`波次 ${r.id} 已发布：${r.total} 箱，前置边由堆叠顺序推导`,"ok");
+    $("w-boxes").value=""; $("w-name").value="";
+    loadAll();
+  }catch(e){ toast("发布波次失败："+e.message+"\n"+JSON.stringify(e.err||{}),"err"); }
+}
+async function grantPermit(){
+  const wave=$("g-wave").value;
+  const body={crane_id:$("g-crane").value.trim(),
+    hatches:$("g-hatches").value.split(",").map(s=>s.trim()).filter(Boolean),
+    valid_from:fromLocal($("g-from").value), valid_to:fromLocal($("g-to").value)};
+  if($("g-boxes").value.trim())
+    body.container_ids=$("g-boxes").value.split(",").map(s=>s.trim()).filter(Boolean);
+  try{
+    const r=await api("POST",`/api/waves/${wave}/permits`,body);
+    toast(`许可 ${r.id} r1 已授予 ${r.crane_id}：${r.hatches.join("/")}，${r.active_count} 个未执行箱`,"ok");
+    loadAll();
+  }catch(e){
+    let extra="";
+    if(e.err&&e.err.conflicts) extra="\n冲突："+e.err.conflicts.map(c=>
+      `${c.hatch}↔${c.other_hatch} 已授 ${c.crane_id}(${c.permit_id})`).join("\n");
+    toast("授予失败："+e.message+extra,"err");
+  }
+}
+async function setPermit(id, act){
+  const reason = act==="suspend" ? prompt("暂停原因：","设备检修")
+               : act==="revoke" ? prompt("撤销原因：","调度调整")
+               : null;
+  if(act!=="resume" && reason===null) return;
+  try{
+    const r=await api("POST",`/api/permits/${id}/${act==="revoked"?"revoke":act}`,
+      reason!==null?{reason}:{});
+    toast(`${id} → ${r.status} r${r.revision}`,"ok"); loadAll();
+  }catch(e){ toast(e.message,"err"); }
+}
+function showAdjust(id){ const d=$("adj-"+id); d.style.display = d.style.display==="none"?"block":"none"; }
+async function adjustPermit(id){
+  const rev=parseInt($("aj-rev-"+id).value,10);
+  const body={expected_revision:rev,
+    hatches:$("aj-h-"+id).value.split(",").map(s=>s.trim()).filter(Boolean),
+    valid_from:fromLocal($("aj-f-"+id).value), valid_to:fromLocal($("aj-t-"+id).value)};
+  try{
+    const r=await api("POST",`/api/permits/${id}/adjust`,body);
+    toast(`调整成功：${id} 现为 r${r.revision}`,"ok"); loadAll();
+  }catch(e){
+    let extra="";
+    if(e.err&&e.err.code==="STALE_REVISION")
+      extra=`\n你的修订号已过期，服务器最新 r${e.err.latest_revision}（旧修订不得覆盖新修订）`;
+    if(e.err&&e.err.conflicts) extra+="\n"+e.err.conflicts.map(c=>
+      `${c.hatch}↔${c.other_hatch} 与 ${c.crane_id}(${c.permit_id}) 冲突`).join("\n");
+    toast("调整失败："+e.message+extra,"err");
+  }
+}
+async function transfer(id){
+  const target=$("tr-"+id).value;
+  if(!target){ toast("请选择转交目标许可","err"); return; }
+  if(!confirm(`${id} 未执行箱一次性转交 ${target}（已执行箱保留原归属），确认？`)) return;
+  try{
+    const r=await api("POST",`/api/permits/${id}/transfer`,
+      {target_permit_id:target},uuid());
+    toast(`转交完成：迁移 ${r.migrated.length} 箱 → ${target}`,"ok"); loadAll();
+  }catch(e){ toast("转交失败："+e.message+"\n"+JSON.stringify(e.err||{}),"err"); }
+}
+async function doScan(){
+  const body={permit_id:$("s-permit").value.trim(), revision:parseInt($("s-rev").value,10),
+    container_id:$("s-box").value.trim(), slot_code:$("s-slot").value.trim(),
+    scanner_id:$("s-scanner").value.trim()};
+  try{
+    const r=await api("POST","/api/scans",body,uuid());
+    if(r.outcome==="loaded"){
+      toast(`✓ ${body.container_id} 装船成功（${r.duplicate?"重复请求已幂等回放":(r.progress?r.progress.executed+"/"+r.progress.total:"")}）`,"ok");
+      $("s-box").value="";
+    }else{
+      toast(`授权异常 ${r.exception_id}：${r.reason}\n${r.detail||""}`,"err");
+    }
+    loadAll();
+  }catch(e){
+    if(e.status===409 && e.err.code==="PREREQ_BLOCKED")
+      toast(`⛔ 前置阻塞：${body.container_id} 需先装 ${e.err.blocked_by.join(", ")}`,"err");
+    else toast("扫描失败："+e.message,"err");
+  }
+}
+async function resolveExc(id, action){
+  const body={action};
+  if(action==="transfer"){
+    body.target_permit_id=$("ex-target-"+id).value;
+    if(!body.target_permit_id){ toast("请选择转交目标","err"); return; }
+  }
+  if(action==="restore" && !confirm("恢复原许可并交回最新修订号，由终端重新扫描？")) return;
+  try{
+    const r=await api("POST",`/api/exceptions/${id}/resolve`,body,uuid());
+    let msg = action==="transfer" ? `已转交至 ${r.resolved_permit_id}`
+      : action==="restore" ? `原许可已恢复（最新 r${r.latest_revision??"?"}），请重新扫描`
+      : "该扫描已作废";
+    toast(msg,"ok"); loadAll();
+  }catch(e){ toast("处置失败："+e.message,"err"); }
+}
+
+loadAll();
+setInterval(loadAll, 3000);
+</script>
+</body>
+</html>

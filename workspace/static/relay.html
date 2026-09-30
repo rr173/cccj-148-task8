@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>船岸中继操作台</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         margin: 0; background: #f4f6f9; color: #1f2933; }
+  header { background: #10243e; color: #fff; padding: 14px 22px; display:flex;
+           align-items:center; gap:16px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header input { padding: 5px 8px; border-radius: 4px; border: none; }
+  header button { padding: 6px 12px; border: none; border-radius: 4px;
+                  background: #2f7ed8; color: #fff; cursor: pointer; }
+  .wrap { padding: 18px 22px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { background: #fff; border-radius: 8px; padding: 14px 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size: 14px; margin: 0 0 10px; display:flex;
+             justify-content:space-between; align-items:center; }
+  .badge { background:#e4edf9; color:#234; border-radius:10px;
+           padding:1px 9px; font-size:12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 7px; border-bottom: 1px solid #eef1f5;
+           vertical-align: top; }
+  th { color: #6b7684; font-weight: 600; background:#fafbfd; }
+  .pill { border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+  .applied { background:#d9f2e3; color:#176c3a; }
+  .pending { background:#fdeccb; color:#8a5a00; }
+  .ignored { background:#e6e8eb; color:#555; }
+  .quarantine, .rejected { background:#fbdcdc; color:#9b1c1c; }
+  .staged { background:#dce9fb; color:#1c4d8e; }
+  button.act { margin-right:4px; padding:2px 8px; font-size:11.5px;
+               border:1px solid #c3ccd8; border-radius:4px; background:#fff;
+               cursor:pointer; }
+  .wide { grid-column: 1 / -1; }
+  input.slot { width: 86px; padding:2px 4px; font-size:11.5px; }
+  #msg { position:fixed; bottom:16px; right:16px; background:#10243e;
+         color:#fff; padding:9px 14px; border-radius:6px; font-size:13px;
+         display:none; max-width: 420px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>船岸断网中继 · 操作台</h1>
+  <label style="font-size:12px">API
+    <input id="api" value="http://127.0.0.1:8090" size="24"></label>
+  <label style="font-size:12px">航次
+    <input id="vid" placeholder="voyage_id" size="22"></label>
+  <button onclick="refresh()">刷新</button>
+  <button onclick="location.reload()">重置</button>
+  <span id="verify" style="margin-left:auto;font-size:12px"></span>
+</header>
+<div class="wrap">
+  <div class="card wide" style="margin-bottom:14px">
+    <h2>会话与游标</h2>
+    <div id="sessions"></div>
+  </div>
+  <div class="cols">
+    <div class="card"><h2>待处理 <span class="badge" id="np"></span></h2>
+      <table id="t-pending"></table></div>
+    <div class="card"><h2>断层暂存 <span class="badge" id="ng"></span></h2>
+      <table id="t-gaps"></table></div>
+    <div class="card"><h2>隔离（同序号不同内容）<span class="badge" id="nq"></span></h2>
+      <table id="t-quar"></table></div>
+    <div class="card"><h2>整包拒绝台账 <span class="badge" id="nr"></span></h2>
+      <table id="t-rej"></table></div>
+    <div class="card wide"><h2>已应用 / 扫描 → 当前航次映射
+        <span class="badge" id="na"></span></h2>
+      <table id="t-applied"></table></div>
+  </div>
+</div>
+<div id="msg"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+function api(path, opts) {
+  return fetch($("api").value.replace(/\/$/,"") + path, opts).then(r => r.json());
+}
+function flash(t){ const m=$("msg"); m.textContent=t; m.style.display="block";
+  setTimeout(()=>m.style.display="none", 3500); }
+function esc(s){ return String(s ?? "").replace(/[&<>]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+async function dispose(rid, action, newSlot) {
+  const request_id = prompt("处置请求 request_id（相同 ID 只生效一次）",
+                            "disp_" + Math.random().toString(16).slice(2, 10));
+  if (!request_id) return;
+  const body = { request_id, record_id: rid, action,
+                 operator_id: "web-console", note: "操作台处置" };
+  if (newSlot) body.new_slot = newSlot;
+  const r = await fetch($("api").value.replace(/\/$/,"") + "/relay/dispose",
+    {method:"POST", headers:{"Content-Type":"application/json"},
+     body: JSON.stringify(body)});
+  const d = await r.json();
+  flash((d.disposition && d.disposition.message) ||
+        (d.error && d.error.message) || JSON.stringify(d));
+  refresh();
+}
+
+function remapPrompt(rid){ const s = prompt("重映射到当前方案槽位（new_slot）");
+  if (s) dispose(rid, "remap", s); }
+
+function table(el, cols, rows) {
+  if (!rows.length) { el.innerHTML =
+    '<tr><td style="color:#97a1ad;padding:8px">（空）</td></tr>'; return; }
+  el.innerHTML = "<tr>" + cols.map(c => `<th>${c[1]}</th>`).join("") + "</tr>"
+    + rows.map(r => "<tr>" + cols.map(c => {
+        const v = c[2](r); return `<td>${v}</td>`; }).join("") + "</tr>").join("");
+}
+
+async function refresh() {
+  const [sess, pend, gaps, quar, app, rej, ver] = await Promise.all([
+    api("/relay/sessions"), api("/relay/pending"), api("/relay/gaps"),
+    api("/relay/quarantine"), api("/relay/applied"),
+    api("/relay/rejected"), api("/relay/verify")]);
+
+  $("sessions").innerHTML = "<table><tr><th>会话</th><th>设备</th><th>游标</th>"
+    + "<th>下一期望</th><th>已应用</th><th>待处理</th><th>暂存</th><th>隔离</th></tr>"
+    + sess.sessions.map(s => `<tr><td>${esc(s.session)}</td><td>${esc(s.device_id)}</td>"
+      + `<td><b>${s.cursor}</b></td><td>#${s.next_expected}</td>"
+      + `<td>${s.applied_count}</td><td>${s.pending_count}</td>"
+      + `<td>${s.staged.length? s.staged.map(x=>"#"+x.seq).join(",") : "—"}</td>"
+      + `<td>${s.quarantine.length? s.quarantine.map(x=>"#"+x.seq).join(","):"—"}</td></tr>`)
+      .join("") + "</table>";
+
+  table($("t-pending"), [
+    ["r","记录", r=>esc(r.record_id).slice(0,18)],
+    ["c","箱号", r=>esc(r.container)],
+    ["s","上报槽位", r=>esc(r.slot)],
+    ["x","原因", r=>esc(r.reason)],
+    ["d","设备", r=>esc(r.device_id)],
+    ["a","处置", r=>`<button class="act" onclick="dispose('${r.record_id}','ignore')">忽略</button>`
+      + `<button class="act" onclick="remapPrompt('${r.record_id}')">重映射</button>`
+      + `<button class="act" onclick="dispose('${r.record_id}','reconfirm')">重调</button>`]
+  ], pend.pending);
+  $("np").textContent = pend.pending.length;
+
+  table($("t-gaps"), [
+    ["s","会话", r=>esc(r.session)], ["c","游标", r=>r.cursor],
+    ["m","缺失序号", r=>r.missing.join(",")],
+    ["g","已暂存", r=>r.staged.map(x=>"#"+x.seq).join(",")]
+  ], gaps.gaps);
+  $("ng").textContent = gaps.gaps.length;
+
+  table($("t-quar"), [
+    ["s","会话",r=>esc(r.session)], ["q","序号",r=>"#"+r.seq],
+    ["m","说明",r=>esc(r.message)]
+  ], quar.quarantine);
+  $("nq").textContent = quar.quarantine.length;
+
+  table($("t-rej"), [
+    ["s","会话",r=>esc(r.session)], ["q","序号",r=>"#"+r.seq],
+    ["c","错误",r=>`<span class="pill rejected">${esc(r.error_code)}</span>`],
+    ["m","说明",r=>esc(r.message)]
+  ], rej.rejected);
+  $("nr").textContent = rej.rejected.length;
+
+  const vid = $("vid").value.trim();
+  let rows = app.applied;
+  if (vid) {
+    const mp = await api(`/relay/voyages/${encodeURIComponent(vid)}/map`);
+    rows = mp.records;
+    $("t-applied").dataset.header = "1";
+    table($("t-applied"), [
+      ["c","箱号", r=>esc(r.container)],
+      ["a","上报槽位", r=>`<span class="${r.slot_matches_plan?"":"pending"}">${esc(r.scanned_slot)}</span>`],
+      ["p","当前方案槽位", r=>esc(r.current_plan_slot ?? "不在方案")],
+      ["m","匹配", r=>r.slot_matches_plan?"是":"否"],
+      ["t","状态", r=>`<span class="pill ${r.status}">${r.status}</span>`],
+      ["rs","原因", r=>esc(r.reason)],
+      ["x","最终槽位", r=>esc(r.resolved_slot)],
+      ["f","确认ID", r=>esc(r.confirmation_id)],
+      ["d","设备/序号", r=>`${esc(r.device_id)} #${r.seq}`]
+    ], rows);
+  } else {
+    table($("t-applied"), [
+      ["c","箱号", r=>esc(r.container)],
+      ["s","槽位", r=>esc(r.resolved_slot||r.slot)],
+      ["f","确认", r=>esc(r.confirmation_id)],
+      ["v","航次", r=>esc(r.voyage_id).slice(-6)],
+      ["d","设备", r=>esc(r.device_id)]
+    ], rows);
+  }
+  $("na").textContent = app.applied.length + " 已应用 / "
+    + app.ignored_count + " 忽略";
+
+  $("verify").innerHTML = ver.ok
+    ? '<span style="color:#7ee2a8">✓ 收件/确认/游标一致</span>'
+    : '<span style="color:#ff9b9b">✗ ' + esc(ver.violations.join("；")) + "</span>";
+}
+refresh();
+setInterval(() => api("/relay/verify").then(v =>
+  $("verify").innerHTML = v.ok
+    ? '<span style="color:#7ee2a8">✓ 收件/确认/游标一致</span>'
+    : '<span style="color:#ff9b9b">✗ 不一致</span>'), 10000);
+</script>
+</body>
+</html>

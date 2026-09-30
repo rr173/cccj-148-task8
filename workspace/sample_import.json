@@ -1,0 +1,576 @@
+{
+ "voyage": {
+  "name": "FEEDER-001 SHA-SIN-HAM",
+  "port_sequence": [
+   "SHA",
+   "SIN",
+   "HAM"
+  ]
+ },
+ "ship": {
+  "lightship_weight": 9000.0,
+  "lightship_lcg": 55.0,
+  "lightship_vcg": 8.5,
+  "min_gm": 1.0,
+  "max_gm": 5.5,
+  "max_trim": 2.0
+ },
+ "stacks": [
+  {
+   "bay": 2,
+   "row": 1,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 2,
+   "row": 1,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 2,
+   "row": 2,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 2,
+   "row": 2,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 2,
+   "row": 3,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 2,
+   "row": 3,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 2,
+   "row": 4,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 2,
+   "row": 4,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 2,
+   "row": 5,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 2,
+   "row": 5,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 2,
+   "row": 6,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 2,
+   "row": 6,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 4,
+   "row": 1,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 4,
+   "row": 1,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 4,
+   "row": 2,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 4,
+   "row": 2,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 4,
+   "row": 3,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 4,
+   "row": 3,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 4,
+   "row": 4,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 4,
+   "row": 4,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 4,
+   "row": 5,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 4,
+   "row": 5,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 4,
+   "row": 6,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 4,
+   "row": 6,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 6,
+   "row": 1,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 6,
+   "row": 1,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 6,
+   "row": 2,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 6,
+   "row": 2,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 6,
+   "row": 3,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 6,
+   "row": 3,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 6,
+   "row": 4,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 6,
+   "row": 4,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 6,
+   "row": 5,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 6,
+   "row": 5,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 2
+  },
+  {
+   "bay": 6,
+   "row": 6,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 6,
+   "row": 6,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 8,
+   "row": 1,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 8,
+   "row": 1,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 8,
+   "row": 2,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 8,
+   "row": 2,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 8,
+   "row": 3,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 8,
+   "row": 3,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 8,
+   "row": 4,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 8,
+   "row": 4,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 8,
+   "row": 5,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 8,
+   "row": 5,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  },
+  {
+   "bay": 8,
+   "row": 6,
+   "max_tiers": 4,
+   "max_weight": 100.0,
+   "on_deck": false
+  },
+  {
+   "bay": 8,
+   "row": 6,
+   "max_tiers": 2,
+   "max_weight": 60.0,
+   "on_deck": true,
+   "reefer_plugs": 0
+  }
+ ],
+ "containers": [
+  {
+   "id": "MSKU000001",
+   "pod": "HAM",
+   "weight": 18.0,
+   "hazard_class": "3"
+  },
+  {
+   "id": "MSKU000002",
+   "pod": "SIN",
+   "weight": 15.0,
+   "hazard_class": "3"
+  },
+  {
+   "id": "MSKU000003",
+   "pod": "HAM",
+   "weight": 21.0,
+   "hazard_class": "3"
+  },
+  {
+   "id": "MSKU000004",
+   "pod": "HAM",
+   "weight": 12.0,
+   "hazard_class": "5.1"
+  },
+  {
+   "id": "MSKU000005",
+   "pod": "SIN",
+   "weight": 14.0,
+   "hazard_class": "5.1"
+  },
+  {
+   "id": "MSKU000006",
+   "pod": "HAM",
+   "weight": 16.0,
+   "hazard_class": "8"
+  },
+  {
+   "id": "MSKU000007",
+   "pod": "SIN",
+   "weight": 11.0,
+   "hazard_class": "8"
+  },
+  {
+   "id": "MSKU000008",
+   "pod": "HAM",
+   "weight": 19.0,
+   "hazard_class": "4.1"
+  },
+  {
+   "id": "MSKU000009",
+   "pod": "SIN",
+   "weight": 17.2,
+   "reefer": true
+  },
+  {
+   "id": "MSKU000010",
+   "pod": "SIN",
+   "weight": 15.5,
+   "reefer": true
+  },
+  {
+   "id": "MSKU000011",
+   "pod": "HAM",
+   "weight": 20.5,
+   "reefer": true
+  },
+  {
+   "id": "MSKU000012",
+   "pod": "HAM",
+   "weight": 14.7,
+   "reefer": true
+  },
+  {
+   "id": "MSKU000013",
+   "pod": "HAM",
+   "weight": 19.4,
+   "reefer": true
+  },
+  {
+   "id": "MSKU000014",
+   "pod": "HAM",
+   "weight": 17.7,
+   "reefer": true
+  },
+  {
+   "id": "MSKU000015",
+   "pod": "SIN",
+   "weight": 18.1
+  },
+  {
+   "id": "MSKU000016",
+   "pod": "SIN",
+   "weight": 16.7
+  },
+  {
+   "id": "MSKU000017",
+   "pod": "SIN",
+   "weight": 9.8
+  },
+  {
+   "id": "MSKU000018",
+   "pod": "HAM",
+   "weight": 24.5
+  },
+  {
+   "id": "MSKU000019",
+   "pod": "SIN",
+   "weight": 12.5
+  },
+  {
+   "id": "MSKU000020",
+   "pod": "HAM",
+   "weight": 27.0
+  },
+  {
+   "id": "MSKU000021",
+   "pod": "HAM",
+   "weight": 15.9
+  },
+  {
+   "id": "MSKU000022",
+   "pod": "HAM",
+   "weight": 8.9
+  },
+  {
+   "id": "MSKU000023",
+   "pod": "HAM",
+   "weight": 13.8
+  },
+  {
+   "id": "MSKU000024",
+   "pod": "SIN",
+   "weight": 10.4
+  },
+  {
+   "id": "MSKU000025",
+   "pod": "SIN",
+   "weight": 24.3
+  },
+  {
+   "id": "MSKU000026",
+   "pod": "SIN",
+   "weight": 19.6
+  },
+  {
+   "id": "MSKU000027",
+   "pod": "HAM",
+   "weight": 15.4
+  },
+  {
+   "id": "MSKU000028",
+   "pod": "HAM",
+   "weight": 9.3
+  },
+  {
+   "id": "MSKU000029",
+   "pod": "SIN",
+   "weight": 12.1
+  },
+  {
+   "id": "MSKU000030",
+   "pod": "HAM",
+   "weight": 16.6
+  },
+  {
+   "id": "MSKU000031",
+   "pod": "SIN",
+   "weight": 19.7
+  },
+  {
+   "id": "MSKU000032",
+   "pod": "HAM",
+   "weight": 14.0
+  },
+  {
+   "id": "MSKU000033",
+   "pod": "HAM",
+   "weight": 22.0
+  },
+  {
+   "id": "MSKU000034",
+   "pod": "SIN",
+   "weight": 19.5
+  },
+  {
+   "id": "MSKU000035",
+   "pod": "HAM",
+   "weight": 25.5
+  },
+  {
+   "id": "MSKU000036",
+   "pod": "HAM",
+   "weight": 13.8
+  }
+ ]
+}

@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>危险品配载与航次变更系统</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.5 "SF Pro", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background:#0f1420; color:#dfe6f3; }
+  header { padding:10px 16px; background:#141b2e; border-bottom:1px solid #26304d;
+           display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 12px 0 0; }
+  button { background:#2b3a5e; color:#dfe6f3; border:1px solid #3b4f7e; border-radius:6px;
+           padding:5px 10px; cursor:pointer; font-size:12px; }
+  button:hover { background:#35487a; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.danger { background:#5e2b2b; border-color:#7e3b3b; }
+  input, select { background:#0f1420; color:#dfe6f3; border:1px solid #3b4f7e;
+                  border-radius:6px; padding:4px 8px; font-size:12px; }
+  main { display:grid; grid-template-columns: 1fr 340px; gap:12px; padding:12px 16px; }
+  .panel { background:#141b2e; border:1px solid #26304d; border-radius:10px; padding:12px; }
+  .panel h2 { font-size:13px; margin:0 0 8px; color:#9fb4e0; }
+  #baySelector { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  #baySelector button.active { background:#4a6db3; }
+  table.bay { border-collapse:collapse; margin:0 auto; }
+  table.bay td, table.bay th { border:1px solid #2a3550; padding:0; text-align:center; }
+  table.bay th { background:#10182b; color:#8fa3cf; font-weight:normal; padding:3px 6px; font-size:11px; }
+  td.slot { width:86px; height:44px; cursor:pointer; vertical-align:middle; font-size:11px; }
+  td.slot.empty { background:#10182b; cursor:default; }
+  td.slot.selected { outline:2px solid #ffd166; }
+  td.slot .cid { font-weight:600; display:block; }
+  td.slot .meta { color:#c8d2ea; font-size:10px; }
+  .pod-SIN { background:#1f4d3a; } .pod-HAM { background:#3a3f6e; }
+  .pod-ROT { background:#5e4a1f; } .pod-other { background:#33415e; }
+  .haz { box-shadow: inset 0 0 0 2px #e84545; }
+  .reefer { box-shadow: inset 0 0 0 2px #3fb6e8; }
+  .haz.reefer { box-shadow: inset 0 0 0 2px #e84545, inset 0 0 0 4px #3fb6e8; }
+  .locked { opacity:.55; }
+  .legend span { display:inline-block; padding:2px 8px; border-radius:4px; margin-right:6px; font-size:11px; }
+  .viol { color:#ff9a9a; font-size:12px; margin:4px 0; cursor:pointer; }
+  .ok { color:#7be495; }
+  .mono { font-family:ui-monospace, Menlo, monospace; font-size:11px; }
+  #events { max-height:180px; overflow:auto; }
+  #events div { border-bottom:1px dashed #26304d; padding:2px 0; font-size:11px; }
+  .row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+  #msg { position:fixed; right:16px; bottom:16px; background:#26304d; padding:10px 14px;
+         border-radius:8px; max-width:420px; display:none; z-index:9; white-space:pre-wrap; }
+  #msg.err { background:#5e2b2b; }
+  #msg.ok { background:#1f4d3a; }
+  .tag { font-size:10px; padding:1px 5px; border-radius:3px; background:#2b3a5e; margin-left:4px; }
+  .diff-add { outline:2px solid #7be495; }
+  .diff-remove { outline:2px dashed #ff9a9a; }
+  .diff-move { outline:2px solid #ffd166; }
+  .diff-locked { outline:3px solid #e8833a; }
+  .tok-active { color:#7be495; } .tok-consumed { color:#8fa3cf; } .tok-voided { color:#ff9a9a; }
+  #diffView { font-size:11px; max-height:340px; overflow:auto; }
+  #diffView h4 { margin:8px 0 4px; font-size:11px; color:#9fb4e0; }
+  #diffView table { width:100%; border-collapse:collapse; }
+  #diffView td { border-bottom:1px dashed #26304d; padding:2px 3px; }
+  .ch-added { color:#7be495; } .ch-removed { color:#ff9a9a; } .ch-moved { color:#ffd166; }
+  .ch-preserved { color:#e8833a; } .ch-missing { color:#ff9a9a; }
+  .digest { font-family:ui-monospace, Menlo, monospace; font-size:10px; word-break:break-all;
+            color:#8fa3cf; background:#10182b; padding:4px 6px; border-radius:4px; }
+  .row select { max-width: 130px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚢 危险品配载与航次变更</h1>
+  <button id="btnImportSample">导入示例航次</button>
+  <span id="voyageInfo" class="mono"></span>
+  <span style="flex:1"></span>
+  <label>计划员 <input id="actor" value="plannerA" size="9"></label>
+  <button id="btnSolve">生成候选配载</button>
+  <button id="btnValidate">校验</button>
+  <button id="btnPublish">发布方案</button>
+</header>
+
+<main>
+  <div>
+    <div class="panel">
+      <h2>舱位图 <span id="planInfo" class="mono"></span></h2>
+      <div class="legend">
+        <span class="pod-SIN">SIN</span><span class="pod-HAM">HAM</span>
+        <span style="box-shadow:inset 0 0 0 2px #e84545">危险品</span>
+        <span style="box-shadow:inset 0 0 0 2px #3fb6e8">冷藏</span>
+        <span class="locked" style="background:#33415e">已锁定</span>
+        <span style="outline:2px solid #7be495">新增</span>
+        <span style="outline:2px solid #ffd166">移动</span>
+        <span style="outline:2px dashed #ff9a9a">移除</span>
+        <span style="outline:3px solid #e8833a">锁定保持</span>
+        <span id="metrics" class="mono"></span>
+      </div>
+      <div id="baySelector"></div>
+      <div style="overflow:auto"><table class="bay" id="bayTable"></table></div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h2>事件日志</h2>
+      <div id="events"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>选中箱 / 操作</h2>
+      <div id="detail">点击舱位图中的一个箱位。</div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h2>航次变更</h2>
+      <div class="row">新港序 <input id="newSeq" size="14" placeholder="SHA,HAM,SIN">
+        <button id="btnResequence">改港评估/倒箱</button></div>
+      <div class="row">箱号 <input id="opCid" size="12" placeholder="MSKU000001"></div>
+      <div class="row">晚到箱重 <input id="opWeight" size="6" placeholder="t">
+        <button id="btnLateWeight">更新</button>
+        <button id="btnRoll" class="danger">临时甩箱</button></div>
+      <div id="moves"></div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h2>校验结果</h2>
+      <div id="violations">—</div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h2>方案差异 / 审批 / 回滚</h2>
+      <div class="row">基线版本
+        <select id="baseVersion"><option value="">最近发布</option></select>
+        <button id="btnDiff">生成差异视图</button>
+      </div>
+      <div id="diffView">选择草稿与基线后点击「生成差异视图」。</div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnApprove">① 申请一次性审批令牌</button>
+      </div>
+      <div id="approvalInfo" class="mono"></div>
+      <div class="row">
+        <button id="btnPublishApproved">② 凭令牌发布</button>
+      </div>
+      <div class="row">回滚到
+        <select id="rollbackVersion"></select>
+        <button id="btnRollback" class="danger">安全回滚草稿</button>
+      </div>
+      <div id="rollbackInfo" class="mono"></div>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h2>方案版本</h2>
+      <div id="versions" class="mono"></div>
+    </div>
+  </div>
+</main>
+<div id="msg"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const S = { voyage:null, plan:null, bay:null, selected:null, violations:[],
+            diff:null, token:null };
+
+async function withRetry(fn) {
+  // retryable VERSION_CONFLICT: refresh, then let the user re-run once
+  try { return await fn(); }
+  catch (err) {
+    if (err.data?.error?.code === "VERSION_CONFLICT") {
+      toast(`版本冲突（可重试）：${err.message}。正在刷新到 v${err.data.error.current_version ?? ""}…`, "err");
+      if (S.voyage) await loadVoyage(S.voyage.id);
+    }
+    throw err;
+  }
+}
+
+function toast(text, kind="ok") {
+  const m = $("msg"); m.textContent = text; m.className = kind; m.style.display = "block";
+  clearTimeout(m._t); m._t = setTimeout(() => m.style.display = "none", 5000);
+}
+async function api(path, method="GET", body=null) {
+  const r = await fetch(path, { method,
+    headers: body ? {"Content-Type":"application/json"} : {},
+    body: body ? JSON.stringify(body) : null });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.error?.message || r.statusText), {data});
+  return data;
+}
+const actor = () => $("actor").value || "planner";
+
+async function importSample() {
+  const payload = await fetch("/sample_import.json").then(r => r.json())
+    .catch(() => null);
+  if (!payload) return toast("无法读取示例文件", "err");
+  const r = await api("/api/import", "POST", {...payload, actor: actor()});
+  toast("已导入航次 " + r.voyage_id);
+  await loadVoyage(r.voyage_id);
+}
+
+async function loadVoyage(vid) {
+  S.voyage = await api(`/api/voyages/${vid}`);
+  $("voyageInfo").textContent =
+    `${S.voyage.name} | 港序 ${S.voyage.port_sequence.join("→")} | ` +
+    `${S.voyage.containers.length}箱`;
+  const plans = S.voyage.plans;
+  const cur = plans.find(p => p.status === "draft") || plans.find(p => p.status === "published");
+  if (cur) await loadPlan(cur.id); else { S.plan = null; renderBaySelector(); renderBay(); }
+  renderVersions(); renderEvents();
+}
+
+async function loadPlan(pid) {
+  S.plan = await api(`/api/plans/${pid}`);
+  S.token = S.plan.approval && (S.plan.approval.status === "active")
+    ? S.plan.approval.token : null;
+  S.diff = null;
+  const m = S.plan.metrics;
+  $("metrics").textContent =
+    ` | GM ${m.gm.toFixed(2)} | trim ${m.trim.toFixed(2)} | 排水量 ${m.displacement.toFixed(0)}t`;
+  $("planInfo").textContent =
+    ` v${S.plan.version} [${S.plan.status}] ${S.plan.valid ? "✓valid" : "✗invalid"}`;
+  if (!S.bay) S.bay = Math.min(...S.voyage.stacks.map(s => s.bay));
+  renderBaySelector(); renderBay(); renderVersions();
+  $("diffView").textContent = "选择草稿与基线后点击「生成差异视图」。";
+  $("rollbackInfo").innerHTML = "";
+}
+
+function slotMap() {
+  const m = {};
+  for (const e of (S.plan?.entries || [])) m[e.slot_code] = e;
+  return m;
+}
+
+function renderBaySelector() {
+  const bays = [...new Set(S.voyage.stacks.map(s => s.bay))].sort((a,b)=>a-b);
+  $("baySelector").innerHTML = bays.map(b =>
+    `<button data-bay="${b}" class="${b===S.bay?'active':''}">Bay ${String(b).padStart(2,"0")}</button>`).join("");
+  $("baySelector").querySelectorAll("button").forEach(btn =>
+    btn.onclick = () => { S.bay = +btn.dataset.bay; renderBaySelector(); renderBay(); });
+}
+
+function renderBay() {
+  const tbl = $("bayTable");
+  if (!S.voyage) { tbl.innerHTML = ""; return; }
+  const slots = slotMap();
+  const stacks = S.voyage.stacks.filter(s => s.bay === S.bay);
+  const rows = [...new Set(stacks.map(s => s.row))].sort((a,b)=>a-b);
+  const holdTiers = Math.max(...stacks.filter(s=>!s.on_deck).map(s=>s.max_tiers), 0);
+  const deckTiers = Math.max(...stacks.filter(s=>s.on_deck).map(s=>s.max_tiers), 0);
+  const violSlots = new Set();
+  const codeById = {};
+  for (const st of S.voyage.stacks) for (const sl of st.slots) codeById[sl.id] = sl.code;
+  for (const v of S.violations) for (const sid of (v.slots||[])) {
+    if (codeById[sid]) violSlots.add(codeById[sid]);
+  }
+
+  let html = "<tr><th>tier\\row</th>" + rows.map(r=>`<th>${String(r).padStart(2,"0")}</th>`).join("") + "</tr>";
+  const diffFrom = {}, diffTo = {}, lockedSlot = {};
+  if (S.diff) {
+    for (const c of S.diff.slot_changes) {
+      if (c.from_slot) diffFrom[c.from_slot] = c.change;
+      if (c.to_slot) diffTo[c.to_slot] = c.change;
+    }
+    for (const c of S.diff.locked_changes || []) {
+      if (c.to_slot) lockedSlot[c.to_slot] = c.status;
+    }
+  }
+  const tierRow = (label, codeTier, onDeck) => "<tr><th>" + label + "</th>" + rows.map(r => {
+    const st = stacks.find(s => s.row === r && s.on_deck === onDeck);
+    const code = `${String(S.bay).padStart(2,"0")}-${String(r).padStart(2,"0")}-${String(codeTier).padStart(2,"0")}`;
+    const slot = st && st.slots.find(x => x.code === code);
+    if (!slot) return `<td class="slot empty"></td>`;
+    const e = slots[code];
+    const dcls = e ? (diffTo[code] ? "diff-"+diffTo[code] : "")
+                   : (diffFrom[code] ? "diff-remove" : "");
+    const lcls = lockedSlot[code] ? "diff-locked" : "";
+    if (!e) return `<td class="slot empty ${dcls}" data-slot="${code}"
+        title="${diffFrom[code]==="moved" ? "箱移走 (moved)" : diffFrom[code]==="removed" ? "箱移除 (removed)" : ""}"></td>`;
+    const cls = ["slot", "pod-"+(S.voyage.port_sequence.includes(e.pod)?e.pod:"other"),
+      e.hazard_class?"haz":"", e.reefer?"reefer":"", e.locked?"locked":"",
+      violSlots.has(code)?"viol-slot":"", dcls, lcls].join(" ");
+    const style = violSlots.has(code) ? 'style="outline:2px solid #ff5b5b"' : "";
+    return `<td class="${cls}" data-slot="${code}" ${style}>
+      <span class="cid">${e.container_id.slice(-6)}</span>
+      <span class="meta">${e.pod} ${e.weight}t${e.hazard_class?" ⚠"+e.hazard_class:""}${e.reefer?" ❄":""}${e.locked?" 🔒":""}</span></td>`;
+  }).join("") + "</tr>";
+  for (let t = deckTiers; t >= 1; t--) html += tierRow(80 + 2*t, 80 + 2*t, true);
+  html += `<tr><th colspan="${rows.length+1}" style="background:#1c2a4a">— 甲板 / 舱内 —</th></tr>`;
+  for (let t = holdTiers; t >= 1; t--) html += tierRow(t, t, false);
+  tbl.innerHTML = html;
+  tbl.querySelectorAll("td.slot[data-slot]").forEach(td =>
+    td.onclick = () => selectSlot(td.dataset.slot));
+}
+
+async function selectSlot(code) {
+  document.querySelectorAll("td.slot.selected").forEach(x => x.classList.remove("selected"));
+  const td = document.querySelector(`td.slot[data-slot="${code}"]`);
+  if (td) td.classList.add("selected");
+  const e = slotMap()[code];
+  S.selected = { code, entry: e };
+  const d = $("detail");
+  if (!e) {
+    d.innerHTML = `<p>空位 <b class="mono">${code}</b></p>` +
+      (S.selectedCid ? `<button onclick="moveHere('${code}')">把 ${S.selectedCid} 移到这里</button>` : "");
+    return;
+  }
+  S.selectedCid = e.container_id;
+  d.innerHTML = `
+    <p><b class="mono">${e.container_id}</b> @ <b class="mono">${code}</b>
+      ${e.locked?'<span class="tag">已锁定</span>':''}</p>
+    <p>卸港 ${e.pod} · ${e.weight}t ${e.hazard_class?`· 危险品 <b>${e.hazard_class}</b>`:""} ${e.reefer?"· 冷藏❄":""}</p>
+    <div class="row">
+      <input id="moveTo" size="10" placeholder="目标位 如04-03-82">
+      <button id="btnMove" ${e.locked?"disabled":""}>移动(自动重校验)</button>
+    </div>
+    <div class="row">
+      <button id="btnConfirm">${e.locked?"已确认装船":"确认装船(幂等)"}</button>
+      <button id="btnDischarge" ${e.locked?"":"disabled"}>卸箱</button>
+    </div>`;
+  $("btnMove").onclick = () => moveHere($("moveTo").value.trim());
+  $("btnConfirm").onclick = async () => {
+    try {
+      const pub = S.voyage.plans.find(p => p.status === "published");
+      if (!pub) return toast("没有已发布方案", "err");
+      const r = await api(`/api/voyages/${S.voyage.id}/confirm`, "POST",
+        { plan_id: pub.id, container_id: e.container_id, slot_code: code, actor: actor() });
+      toast(r.idempotent ? "重复确认：已忽略（幂等）" : "已锁定 " + e.container_id);
+      await loadVoyage(S.voyage.id);
+    } catch (err) { toast(err.message, "err"); }
+  };
+  $("btnDischarge").onclick = async () => {
+    try {
+      await api(`/api/voyages/${S.voyage.id}/discharge`, "POST",
+        { container_id: e.container_id, actor: actor() });
+      toast("已卸箱 " + e.container_id); await loadVoyage(S.voyage.id);
+    } catch (err) { toast(err.message, "err"); }
+  };
+}
+
+async function moveHere(target) {
+  if (!S.selectedCid || !target) return;
+  if (!S.plan || S.plan.status !== "draft") return toast("只有草稿方案可调整", "err");
+  try {
+    const r = await api(`/api/plans/${S.plan.id}/adjust`, "POST",
+      { actor: actor(), moves: [{ container_id: S.selectedCid, to_slot: target }] });
+    showViolations(r.violations);
+    toast(r.valid ? "移动成功，受影响舱区校验通过" :
+                    `移动后存在 ${r.violations.length} 项违规（见右下）`, r.valid ? "ok" : "err");
+    await loadPlan(S.plan.id); await loadVoyage(S.voyage.id);
+  } catch (err) { toast(err.message, "err"); }
+}
+
+function showViolations(vs) {
+  S.violations = vs || [];
+  const el = $("violations");
+  if (!vs || !vs.length) { el.innerHTML = '<span class="ok">✓ 无违规</span>'; return; }
+  el.innerHTML = vs.map(v =>
+    `<div class="viol" title="${(v.containers||[]).join(",")}">✗ [${v.code}] ${v.message}</div>`).join("");
+}
+
+async function solve() {
+  if (!S.voyage) return toast("请先导入航次", "err");
+  const { job_id } = await api(`/api/voyages/${S.voyage.id}/solve`, "POST", { actor: actor() });
+  toast("求解中… " + job_id);
+  const t = setInterval(async () => {
+    const j = await api(`/api/jobs/${job_id}`);
+    if (j.status !== "running") {
+      clearInterval(t);
+      if (j.status === "done") {
+        toast(`求解完成：${j.stats.placed}箱入位，${j.stats.unplaced.length}未配`);
+        if (j.plan_id) { await loadVoyage(S.voyage.id); await loadPlan(j.plan_id); }
+      } else toast("求解 " + j.status + (j.error ? ": " + j.error : ""), "err");
+    }
+  }, 400);
+}
+
+async function validateNow() {
+  if (!S.plan) return;
+  const r = await api(`/api/plans/${S.plan.id}/validate`, "POST");
+  showViolations(r.violations);
+  toast(r.valid ? "校验通过" : `${r.violations.length} 项违规`, r.valid ? "ok" : "err");
+  renderBay();
+}
+
+async function publish() {
+  // top-bar shortcut: request a token then publish (two API calls, one click)
+  if (!S.plan) return;
+  if (S.plan.status !== "draft") return toast("只有草稿可发布", "err");
+  try {
+    if (!S.token) await requestApproval(true);
+    await doPublish();
+  } catch (err) { /* already toasted */ }
+}
+
+async function resequence() {
+  const seq = $("newSeq").value.split(",").map(s => s.trim()).filter(Boolean);
+  if (!seq.length) return toast("请输入新港序", "err");
+  try {
+    const r = await api(`/api/voyages/${S.voyage.id}/resequence`, "POST",
+      { new_sequence: seq, actor: actor() });
+    if (!r.restow_required) { $("moves").innerHTML = "<p class='ok'>现有堆位可按新港序卸载，无需倒箱</p>"; }
+    else {
+      $("moves").innerHTML = "<p><b>倒箱方案（" + r.moves.length + "步）</b></p>" +
+        r.moves.map((m,i)=>`<div class="mono">${i+1}. ${m.container}: ${m.from} → ${m.to} <span style="color:#8fa3cf">${m.reason}</span></div>`).join("");
+    }
+    toast(r.restow_required ? "已生成倒箱方案与新草稿" : "无需倒箱");
+    await loadVoyage(S.voyage.id);
+  } catch (err) { toast("改港失败：" + err.message, "err"); }
+}
+
+async function lateWeight() {
+  const cid = $("opCid").value.trim(), w = parseFloat($("opWeight").value);
+  if (!cid || !w) return toast("请输入箱号与重量", "err");
+  try {
+    const r = await api(`/api/voyages/${S.voyage.id}/late-weight`, "POST",
+      { container_id: cid, weight: w, actor: actor() });
+    showViolations(r.violations || []);
+    toast(r.locked ? "箱已锁定：仅更新重量并全船复核" :
+                     `已更新，重排未锁定部分 ${r.valid ? "✓" : "✗存在违规"}`,
+          r.valid === false ? "err" : "ok");
+    await loadVoyage(S.voyage.id);
+  } catch (err) { toast(err.message, "err"); }
+}
+
+async function roll() {
+  const cid = $("opCid").value.trim();
+  if (!cid) return toast("请输入箱号", "err");
+  try {
+    await api(`/api/voyages/${S.voyage.id}/roll`, "POST",
+      { container_id: cid, actor: actor() });
+    toast("已甩箱 " + cid + "（未锁定部分已重排）");
+    await loadVoyage(S.voyage.id);
+  } catch (err) { toast(err.message, "err"); }
+}
+
+function renderVersions() {
+  if (!S.voyage) return;
+  $("versions").innerHTML = S.voyage.plans.map(p =>
+    `<div>v${p.version} [${p.status}] ${p.valid?"✓":"✗"} ${p.created_by||""}
+       <span class="meta">${p.created_at||""}</span>
+       <button data-pid="${p.id}">查看</button></div>`).join("") || "—";
+  $("versions").querySelectorAll("button").forEach(b =>
+    b.onclick = () => loadPlan(b.dataset.pid));
+  // base-version / rollback selectors
+  const plans = S.voyage.plans;
+  const cur = S.plan;
+  const baseSel = $("baseVersion");
+  baseSel.innerHTML = `<option value="">最近发布</option>` + plans
+    .filter(p => p.status === "history" || p.status === "published")
+    .map(p => `<option value="${p.version}">v${p.version} [${p.status}]</option>`).join("");
+  const rbSel = $("rollbackVersion");
+  rbSel.innerHTML = plans.filter(p => cur && p.version < cur.version)
+    .map(p => `<option value="${p.version}">v${p.version} [${p.status}]</option>`)
+    .join("") || `<option value="">（无历史版本）</option>`;
+  renderApprovalInfo();
+}
+
+function renderApprovalInfo() {
+  const a = S.plan?.approval;
+  const el = $("approvalInfo");
+  if (!el) return;
+  if (!a) { el.innerHTML = "<span class='meta'>当前方案无审批令牌</span>"; return; }
+  el.innerHTML = `<div>令牌 <span class="tok-${a.status}">${a.status}</span>
+      <span class="meta">${a.token.slice(-8)}</span></div>
+    <div class="meta">${a.requested_by||""} @ ${a.created_at||""}</div>
+    <div class="digest">${a.digest.slice(0,24)}…</div>`;
+}
+
+async function generateDiff() {
+  if (!S.plan) return toast("请先选择方案", "err");
+  const base = $("baseVersion").value;
+  try {
+    const r = await withRetry(() =>
+      api(`/api/plans/${S.plan.id}/diff${base ? `?base_version=${base}` : ""}`));
+    S.diff = r.diff;
+    renderBay();
+    renderDiff(r);
+  } catch (err) { toast("差异生成失败：" + err.message, "err"); }
+}
+
+function slotPair(c) {
+  return `${c.from_slot ? c.from_slot : "∅"} → ${c.to_slot ? c.to_slot : "∅"}`;
+}
+function dgPairTable(rows) {
+  if (!rows.length) return "<span class='meta'>无</span>";
+  return "<table>" + rows.map(r =>
+    `<tr><td>${r.containers.join(" / ")}
+       <span class="meta">(${r.classes[r.containers[0]]},${r.classes[r.containers[1]]})</span></td>
+     <td class="mono">${(r.from_distance??"—")}m → ${(r.to_distance??"—")}m</td>
+     <td class="meta">${r.rule.kind}${r.rule.required?" ≥"+r.rule.required+"m":""}</td></tr>`).join("") + "</table>";
+}
+
+function renderDiff(r) {
+  const d = r.diff, c = d.counts;
+  const baseTxt = r.base
+    ? `v${r.base.version} [${r.base.status}] ${r.base.created_by||""} @ ${r.base.created_at}`
+    : "空基线（首次发布）";
+  const targetTxt = `v${r.target.version} [${r.target.status}] ${r.target.created_by||""} @ ${r.target.created_at}`;
+  const s = d.stability_changes;
+  const stabRow = k =>
+    `<tr><td>${k.toUpperCase()}</td><td>${s.from[k].toFixed(3)}</td>
+      <td class="${Math.abs(s.delta[k])>1e-9?'ch-move':''}">${s.to[k].toFixed(3)}
+      (Δ${s.delta[k]>=0?"+":""}${s.delta[k].toFixed(3)})</td></tr>`;
+  $("diffView").innerHTML = `
+    <div class="meta">基线 ${baseTxt}<br>目标 ${targetTxt}</div>
+    <h4>① 箱位变化（${c.slot_changes}：+${c.added} −${c.removed} ↔${c.moved}）</h4>
+    <table>${d.slot_changes.slice(0,60).map(x =>
+      `<tr><td class="ch-${x.change}">${({added:"新增",removed:"移除",moved:"移动"})[x.change]}</td>
+        <td>${x.container_id}${x.hazard_class?` <span class="meta">⚠${x.hazard_class}</span>`:""}
+            ${x.locked?'🔒':''}</td>
+        <td class="mono">${slotPair(x)}</td></tr>`).join("") ||
+      '<tr><td><span class="ok">无箱位变化</span></td></tr>'}</table>
+    <h4>② 危险品隔离（新增违规 ${c.segregation_introduced} · 解除 ${c.segregation_resolved} · 距离变化 ${c.segregation_distance_changed}）</h4>
+    <div class="ch-removed">新增隔离冲突：</div>${dgPairTable(d.segregation_changes.introduced)}
+    <div class="ch-added">已解除：</div>${dgPairTable(d.segregation_changes.resolved)}
+    <h4>③ 稳性指标变化</h4>
+    <table><tr><th></th><th>基线</th><th>目标</th></tr>
+      ${stabRow("gm")}${stabRow("kg")}${stabRow("lcg")}${stabRow("trim")}${stabRow("displacement")}
+    </table>
+    <div class="meta">GM 限值 [${s.limits.min_gm}, ${s.limits.max_gm}] ·
+      纵倾限 ±${s.limits.max_trim} ·
+      GM ${s.gm_ok_after?'<span class="ok">达标</span>':'<span class="ch-removed">超限</span>'}
+      / trim ${s.trim_ok_after?'<span class="ok">达标</span>':'<span class="ch-removed">超限</span>'}</div>
+    <h4>④ 锁定箱变化（保持 ${c.locked_preserved} · 移动 ${c.locked_moved} · 缺失 ${c.locked_missing}）</h4>
+    <table>${d.locked_changes.map(x =>
+      `<tr><td class="ch-${x.status}">${({preserved:"保持原位",moved:"移动!",added:"新增",missing:"缺失!"})[x.status]}</td>
+        <td>${x.container_id} 🔒</td><td class="mono">${x.from_slot||"∅"} → ${x.to_slot||"∅"}</td></tr>`).join("")
+      || '<tr><td><span class="meta">无锁定箱</span></td></tr>'}</table>
+    <h4>差异摘要（绑定审批令牌）</h4>
+    <div class="digest">sha256:${d.digest}</div>`;
+}
+
+async function requestApproval(silent=false) {
+  if (!S.plan) return toast("请先选择草稿", "err");
+  try {
+    const r = await withRetry(() =>
+      api(`/api/plans/${S.plan.id}/approvals`, "POST", { actor: actor() }));
+    S.token = r.token;
+    S.diff = r.diff;
+    renderDiff({ target: { version: r.plan_version, status: "draft",
+                           created_by: r.created_by, created_at: r.created_at },
+                 base: r.base, diff: r.diff });
+    renderBay(); renderApprovalInfo();
+    if (!silent) toast(r.idempotent ? "令牌仍有效（幂等返回）" :
+      `已签发一次性审批令牌（${r.token.slice(-8)}），绑定 v${r.plan_version} 与差异摘要`);
+    return r;
+  } catch (err) { toast("审批申请失败：" + err.message, "err"); throw err; }
+}
+
+async function doPublish() {
+  if (!S.token) return toast("请先申请审批令牌", "err");
+  try {
+    const r = await withRetry(() =>
+      api(`/api/plans/${S.plan.id}/publish`, "POST",
+          { token: S.token, actor: actor(), expected_version: S.plan.version }));
+    toast(r.idempotent ? "重复提交：返回原发布结果（幂等）" : "已发布 v" + r.version);
+    S.token = null;
+    await loadVoyage(S.voyage.id);
+  } catch (err) {
+    if (err.data?.error?.code === "DIFF_MISMATCH") {
+      S.token = null;
+      toast("草稿在审批后发生变化，令牌已失效：请重新生成差异并申请审批", "err");
+    } else {
+      showViolations(err.data?.error?.violations || []);
+      toast("发布被拒绝：" + err.message, "err");
+    }
+    await loadVoyage(S.voyage.id);
+  }
+}
+
+async function rollback() {
+  if (!S.plan) return toast("请先选择草稿", "err");
+  const tv = parseInt($("rollbackVersion").value, 10);
+  if (!tv) return toast("请选择历史版本", "err");
+  if (!confirm(`将未发布草稿 v${S.plan.version} 回滚到 v${tv}？\n锁定/已确认箱位置保持不变，回滚后重新全船校验并生成新版本。`))
+    return;
+  try {
+    const r = await withRetry(() =>
+      api(`/api/plans/${S.plan.id}/rollback`, "POST",
+          { target_version: tv, actor: actor(), expected_version: S.plan.version }));
+    $("rollbackInfo").innerHTML =
+      `<div class="ok">✓ 新版本 v${r.new_version}（回滚自 v${r.target_version}），全船校验 ${r.valid?"通过":"未通过"}</div>
+       <div>锁定箱保持原位：${r.locked_preserved}；被挤位重新落位：${r.displaced_parked.length}</div>` +
+      r.displaced_parked.map(p =>
+        `<div class="mono ch-move">${p.container_id}: ${p.from_slot} → ${p.to_slot}</div>`).join("");
+    if (!r.valid) showViolations(r.violations);
+    toast(`回滚完成：新草稿 v${r.new_version}`);
+    await loadVoyage(S.voyage.id);
+    await loadPlan(r.new_plan_id);
+  } catch (err) { toast("回滚失败（未产生半成品版本）：" + err.message, "err"); }
+}
+
+async function renderEvents() {
+  if (!S.voyage) return;
+  const ev = await api(`/api/voyages/${S.voyage.id}/events`);
+  $("events").innerHTML = ev.map(e =>
+    `<div><span class="mono">${e.created_at}</span> ${e.actor||""} <b>${e.action}</b></div>`).join("");
+}
+
+$("btnImportSample").onclick = () => importSample().catch(e => toast(e.message, "err"));
+$("btnSolve").onclick = () => solve().catch(e => toast(e.message, "err"));
+$("btnValidate").onclick = () => validateNow().catch(e => toast(e.message, "err"));
+$("btnPublish").onclick = () => publish();
+$("btnResequence").onclick = () => resequence();
+$("btnLateWeight").onclick = () => lateWeight();
+$("btnRoll").onclick = () => roll();
+$("btnDiff").onclick = () => generateDiff().catch(e => toast(e.message, "err"));
+$("btnApprove").onclick = () => requestApproval().catch(() => {});
+$("btnPublishApproved").onclick = () => doPublish();
+$("btnRollback").onclick = () => rollback();
+</script>
+</body>
+</html>

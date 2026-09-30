@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>冷藏箱岸电操作台</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <h1>冷藏箱岸电接入与断电迁移操作台</h1>
+  <div class="bar">
+    <span id="clock"></span>
+    <label class="auto">
+      <input type="checkbox" id="auto" checked /> 自动刷新(2s)
+    </label>
+    <button id="refresh">立即刷新</button>
+  </div>
+</header>
+
+<main>
+  <section class="cards" id="summary"></section>
+
+  <nav class="tabs">
+    <button data-tab="topology" class="active">配电拓扑/实时负载</button>
+    <button data-tab="reefers">冷藏箱与未接电</button>
+    <button data-tab="peak">功率预算/削峰</button>
+    <button data-tab="precool">预冷合格证/放行</button>
+    <button data-tab="trips">跳闸影响与迁移</button>
+    <button data-tab="samples">异常采样</button>
+    <button data-tab="admin">录入/导入</button>
+  </nav>
+
+  <section id="tab-topology" class="tab active"></section>
+  <section id="tab-reefers" class="tab"></section>
+  <section id="tab-peak" class="tab"></section>
+  <section id="tab-precool" class="tab"></section>
+  <section id="tab-trips" class="tab"></section>
+  <section id="tab-samples" class="tab"></section>
+  <section id="tab-admin" class="tab"></section>
+</main>
+
+<dialog id="cmd">
+  <form method="dialog" id="cmdForm">
+    <h3 id="cmdTitle"></h3>
+    <input type="hidden" id="cmdAction" />
+    <div id="cmdBody"></div>
+    <menu>
+      <button value="cancel">取消</button>
+      <button id="cmdOk" value="default">提交</button>
+    </menu>
+    <pre id="cmdResult"></pre>
+  </form>
+</dialog>
+
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
