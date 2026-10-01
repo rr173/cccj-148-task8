@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>压载水联动执行模块</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.5 "SF Pro", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background:#0f1420; color:#dfe6f3; }
+  header { padding:10px 16px; background:#141b2e; border-bottom:1px solid #26304d;
+           display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 12px 0 0; }
+  button { background:#2b3a5e; color:#dfe6f3; border:1px solid #3b4f7e; border-radius:6px;
+           padding:5px 10px; cursor:pointer; font-size:12px; }
+  button:hover { background:#35487a; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.danger { background:#5e2b2b; border-color:#7e3b3b; }
+  button.go { background:#1f4d3a; border-color:#2f7d5a; }
+  input, select, textarea { background:#0f1420; color:#dfe6f3; border:1px solid #3b4f7e;
+                  border-radius:6px; padding:4px 8px; font-size:12px; }
+  textarea { width:100%; font-family:ui-monospace, Menlo, monospace; font-size:11px; }
+  main { display:grid; grid-template-columns: 400px 1fr 360px; gap:12px; padding:12px 16px; }
+  .panel { background:#141b2e; border:1px solid #26304d; border-radius:10px;
+           padding:12px; margin-bottom:12px; }
+  .panel h2 { font-size:13px; margin:0 0 8px; color:#9fb4e0; }
+  .row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+  .mono { font-family:ui-monospace, Menlo, monospace; font-size:11px; }
+  .tank { margin:6px 0; }
+  .tank .bar { height:14px; background:#10182b; border:1px solid #2a3550;
+               border-radius:4px; overflow:hidden; position:relative; }
+  .tank .fill { height:100%; background:#2f6db3; }
+  .tank .fill.warn { background:#b3832f; }
+  .tank .meta { font-size:11px; color:#9fb4e0; display:flex; justify-content:space-between; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { border-bottom:1px dashed #26304d; padding:3px 5px; font-size:11px;
+           text-align:left; }
+  th { color:#8fa3cf; font-weight:normal; }
+  .ok { color:#7be495; } .bad { color:#ff9a9a; } .warn { color:#ffd166; }
+  .step { border:1px solid #26304d; border-radius:8px; padding:8px; margin:6px 0; }
+  .step.running { border-color:#3fb6e8; }
+  .step.confirmed { opacity:.6; }
+  .step.frozen { opacity:.4; border-style:dashed; }
+  .tag { font-size:10px; padding:1px 6px; border-radius:3px; background:#2b3a5e;
+         margin-left:4px; }
+  .tag.running { background:#1f4d5e; } .tag.confirmed { background:#1f4d3a; }
+  .tag.paused { background:#5e4a1f; } .tag.frozen { background:#3a3a3a; }
+  #events { max-height:220px; overflow:auto; }
+  #events div { border-bottom:1px dashed #26304d; padding:2px 0; font-size:11px; }
+  #msg { position:fixed; right:16px; bottom:16px; background:#26304d; padding:10px 14px;
+         border-radius:8px; max-width:460px; display:none; z-index:9; white-space:pre-wrap;
+         font-size:12px; }
+  #msg.err { background:#5e2b2b; } #msg.ok { background:#1f4d3a; }
+  .gauge { display:inline-block; margin:3px 8px 3px 0; padding:4px 8px;
+           border:1px solid #2a3550; border-radius:6px; font-size:11px; }
+  .gauge b { font-size:13px; }
+  .alarm { border-left:3px solid #e84545; padding:4px 8px; margin:4px 0;
+           background:#10182b; font-size:11px; }
+  .alarm.acked { opacity:.45; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚓ 压载水联动执行</h1>
+  <input id="vid" placeholder="航次 ID" size="26">
+  <button onclick="loadAll()">载入</button>
+  <button onclick="genPlan()">生成方案</button>
+  <button onclick="recheck()">复核剩余方案</button>
+  <button onclick="recover()">崩溃恢复</button>
+  <a href="/stowage" style="color:#9fb4e0;font-size:12px">配载页 →</a>
+  <span id="hdrInfo" class="mono"></span>
+</header>
+<main>
+  <div>
+    <div class="panel">
+      <h2>压载拓扑（大副录入）</h2>
+      <div class="row">
+        <button onclick="fillSample()">示例拓扑</button>
+        <button onclick="saveTopo()" class="go">保存拓扑</button>
+        <span id="topoSum" class="mono"></span>
+      </div>
+      <textarea id="topoJson" rows="10" spellcheck="false"></textarea>
+      <div id="tankView"></div>
+    </div>
+    <div class="panel">
+      <h2>实时稳性</h2>
+      <div id="stab"></div>
+    </div>
+    <div class="panel">
+      <h2>偏差告警</h2>
+      <div id="alarms"></div>
+    </div>
+  </div>
+  <div>
+    <div class="panel">
+      <h2>方案时间线 <span id="planInfo" class="mono"></span></h2>
+      <div id="steps"></div>
+    </div>
+    <div class="panel">
+      <h2>传感器反馈模拟（液位 m³ / 流量 m³/h）</h2>
+      <div class="row">
+        <button onclick="fillFeedback()" >按当前步骤目标填充</button>
+        <button onclick="sendFeedback()" class="go">发送反馈</button>
+      </div>
+      <textarea id="fbJson" rows="4" spellcheck="false"></textarea>
+    </div>
+    <div class="panel">
+      <h2>事件账本</h2>
+      <div id="events"></div>
+    </div>
+  </div>
+  <div>
+    <div class="panel">
+      <h2>泵阀占用</h2>
+      <div id="resources"></div>
+      <div class="row">
+        <select id="seizePump"></select>
+        <input id="seizeOfficer" placeholder="值班员" size="8" value="zhang">
+        <button onclick="seize()">抢占</button>
+        <button onclick="releasePump()">释放</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>修订历史</h2>
+      <div id="revisions"></div>
+    </div>
+    <div class="panel">
+      <h2>检查点</h2>
+      <div id="checkpoints" class="mono" style="max-height:180px;overflow:auto"></div>
+    </div>
+  </div>
+</main>
+<div id="msg"></div>
+<script>
+let VID = null, PLAN = null, LAST_REQ = null;
+
+const $ = id => document.getElementById(id);
+function msg(t, ok=true){ const m=$("msg"); m.textContent=t; m.className=ok?"ok":"err";
+  m.style.display="block"; clearTimeout(m._t); m._t=setTimeout(()=>m.style.display="none",5000); }
+async function api(path, body){
+  const opt = body!==undefined ? {method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)} : {};
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){ const e=new Error(j.error?j.error.message:r.statusText);
+    e.code=j.error&&j.error.code; e.extra=j.error; throw e; }
+  return j;
+}
+function tok(){ return "tok-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,7); }
+
+const SAMPLE_TOPO = {
+  tanks: [
+    {name:"FPT", capacity:300, min_level:10, max_level:285, level:120, x:100, y:0, z:2},
+    {name:"APT", capacity:300, min_level:10, max_level:285, level:150, x:8,  y:0, z:2},
+    {name:"W1P", capacity:250, min_level:10, max_level:238, level:100, x:40, y:-9, z:6},
+    {name:"W1S", capacity:250, min_level:10, max_level:238, level:180, x:40, y:9,  z:6},
+    {name:"W2P", capacity:250, min_level:10, max_level:238, level:100, x:70, y:-9, z:6},
+    {name:"W2S", capacity:250, min_level:10, max_level:238, level:170, x:70, y:9,  z:6},
+    {name:"DB1", capacity:400, min_level:10, max_level:380, level:200, x:55, y:0,  z:1}
+  ],
+  pumps: [{name:"P1", rate:150}, {name:"P2", rate:150}],
+  valves: [{name:"V_FPT"},{name:"V_APT"},{name:"V_W1P"},{name:"V_W1S"},
+           {name:"V_W2P"},{name:"V_W2S"},{name:"V_DB1"}],
+  pipes: [],
+  config: {max_heel_deg:2.0, max_draft:9.5, min_draft:3.0, max_bm:12,
+           tpc:25, tolerance:2, drift_tol:1, low_flow_ratio:0.3}
+};
+for(const t of SAMPLE_TOPO.tanks){
+  SAMPLE_TOPO.pipes.push({name:"suc_"+t.name, a:t.name, b:"V_"+t.name});
+  SAMPLE_TOPO.pipes.push({name:t.name+"_P1", a:"V_"+t.name, b:"P1"});
+  SAMPLE_TOPO.pipes.push({name:t.name+"_P2", a:"V_"+t.name, b:"P2",
+                          mutex_group: t.name==="DB1" ? "manifold" : null});
+}
+
+function fillSample(){ $("topoJson").value = JSON.stringify(SAMPLE_TOPO, null, 1); }
+
+async function saveTopo(){
+  try{
+    const payload = JSON.parse($("topoJson").value);
+    await api(`/api/ballast/${VID}/topology`, payload);
+    msg("拓扑已保存"); loadAll();
+  }catch(e){ msg("保存拓扑失败: "+e.message, false); }
+}
+
+async function genPlan(){
+  try{ const r = await api(`/api/ballast/${VID}/plan`, {stages:3, actor:"chief"});
+    msg(`方案已生成：修订 r${r.revision}，${r.steps.length} 步，总水量 ${r.total_ballast}m³`);
+    loadAll();
+  }catch(e){ msg("生成失败 ["+(e.code||"")+"]: "+e.message, false); loadAll(); }
+}
+
+async function recheck(){
+  try{ const r = await api(`/api/ballast/${VID}/recheck`, {reason:"manual"});
+    msg(r.replanned ? `剩余方案不再安全 → 已冻结未开始步骤并生成 r${r.revision}`
+                    : "剩余方案仍然安全"); loadAll();
+  }catch(e){ msg("复核失败: "+e.message, false); }
+}
+
+async function recover(){
+  try{ const r = await api(`/api/ballast/recover`, {voyage_id: VID});
+    msg("恢复完成: "+JSON.stringify(r.recovered.map(x=>({running:x.running_step,
+        transferred:x.transferred_so_far, fixed:x.fixed})))); loadAll();
+  }catch(e){ msg("恢复失败: "+e.message, false); }
+}
+
+async function execAction(kind, body){
+  try{
+    const r = await api(`/api/ballast/${VID}/exec/${kind}`, body);
+    LAST_REQ = {kind, body};
+    if(r.revision_moved) msg(`旧修订请求 → 最新方案 r${r.current_revision}`, false);
+    else msg(kind+" 成功"+(r.idempotent?"（幂等回放）":"")+
+             (r.transferred!==undefined?` 转移量 ${r.transferred}m³`:""));
+    loadAll();
+  }catch(e){ msg(kind+" 被拒 ["+(e.code||"")+"]: "+e.message, false); loadAll(); }
+}
+
+async function seize(){
+  try{ const r = await api(`/api/ballast/${VID}/seize`,
+    {token:tok(), pump_id:$("seizePump").value, officer:$("seizeOfficer").value});
+    msg(`泵组 ${r.pump_id} 已抢占（${r.officer}）`); loadAll();
+  }catch(e){ msg("抢占被拒 ["+(e.code||"")+"]: "+e.message, false); }
+}
+async function releasePump(){
+  try{ await api(`/api/ballast/${VID}/release`,
+    {token:tok(), pump_id:$("seizePump").value, officer:$("seizeOfficer").value});
+    msg("已释放"); loadAll();
+  }catch(e){ msg("释放失败: "+e.message, false); }
+}
+
+function fillFeedback(){
+  if(!PLAN || !PLAN.steps) return;
+  const run = PLAN.steps.find(s=>s.status==="running"||s.status==="paused");
+  const next = run || PLAN.steps.find(s=>s.status==="pending");
+  if(!next){ msg("没有待执行步骤", false); return; }
+  api(`/api/ballast/${VID}/topology`).then(t=>{
+    const lv = {}; for(const tk of t.tanks) lv[tk.name]=tk.level;
+    lv[next.source_tank] = +(lv[next.source_tank]-next.target_volume).toFixed(2);
+    lv[next.target_tank] = +(lv[next.target_tank]+next.target_volume).toFixed(2);
+    const flows = {}; flows[next.pump_id]=150;
+    $("fbJson").value = JSON.stringify({levels:lv, flows}, null, 1);
+  });
+}
+async function sendFeedback(){
+  try{
+    const p = JSON.parse($("fbJson").value);
+    const r = await api(`/api/ballast/${VID}/feedback`, p);
+    msg("反馈已处理"+(r.paused?"（流量不足→自动暂停）":"")+
+        (r.replanned?`（漂移→已重算 r${r.replanned.revision}）`:"")+
+        (r.alarms&&r.alarms.length?` ${r.alarms.length} 条告警`:""));
+    loadAll();
+  }catch(e){ msg("反馈失败: "+e.message, false); }
+}
+
+async function loadAll(){
+  VID = $("vid").value.trim() || VID;
+  if(!VID) return;
+  $("vid").value = VID;
+  try{
+    const [topo, plan, stab, res, alarms, revs, events, cps] = await Promise.all([
+      api(`/api/ballast/${VID}/topology`).catch(()=>null),
+      api(`/api/ballast/${VID}/plan`),
+      api(`/api/ballast/${VID}/stability`),
+      api(`/api/ballast/${VID}/resources`),
+      api(`/api/ballast/${VID}/alarms`),
+      api(`/api/ballast/${VID}/revisions`),
+      api(`/api/ballast/${VID}/events`),
+      api(`/api/ballast/${VID}/checkpoints`),
+    ]);
+    PLAN = plan;
+    renderTopo(topo); renderStab(stab); renderAlarms(alarms);
+    renderSteps(plan); renderRes(res); renderRevs(revs); renderEvents(events);
+    renderCps(cps);
+    $("hdrInfo").textContent = `总水量 ${stab.total_ballast}m³ 已装 ${stab.confirmed_weight}t`;
+  }catch(e){ msg("载入失败: "+e.message, false); }
+}
+
+function renderTopo(t){
+  if(!t){ $("tankView").innerHTML=""; return; }
+  $("topoSum").textContent = `${t.tanks.length}舱 ${t.pumps.length}泵 ${t.valves.length}阀 ${t.pipes.length}管`;
+  if(!$("topoJson").value) $("topoJson").value = JSON.stringify(
+    {tanks:t.tanks, pumps:t.pumps, valves:t.valves, pipes:t.pipes, config:t.config}, null, 1);
+  $("tankView").innerHTML = t.tanks.map(k=>{
+    const pct = (k.level/k.capacity*100).toFixed(0);
+    const warn = k.level<=k.min_level+1 || k.level>=k.max_level-1;
+    return `<div class="tank"><div class="meta"><b>${k.name}</b>
+      <span>${k.level.toFixed(1)}/${k.capacity}m³ [${k.min_level}~${k.max_level}]</span></div>
+      <div class="bar"><div class="fill${warn?" warn":""}" style="width:${pct}%"></div></div></div>`;
+  }).join("");
+}
+
+function renderStab(s){
+  const vio = new Set((s.violations||[]).map(v=>v.code));
+  const g = (label, val, bad)=>`<span class="gauge">${label}<br>
+    <b class="${bad?'bad':'ok'}">${val}</b></span>`;
+  const m = s.metrics;
+  $("stab").innerHTML =
+    g("GM m", m.gm, vio.has("GM_LOW")||vio.has("GM_HIGH")) +
+    g("横倾 °", m.heel_deg, vio.has("HEEL")) +
+    g("纵倾 m", m.trim, vio.has("TRIM")) +
+    g("平均吃水 m", m.draft_mean, vio.has("DRAFT_HIGH")||vio.has("DRAFT_LOW")) +
+    g("艏/艉吃水", `${m.draft_fwd}/${m.draft_aft}`, false) +
+    g("受力代理", m.bm_ratio, vio.has("HULL_STRESS")) +
+    g("排水量 t", m.displacement, false) +
+    (s.violations||[]).map(v=>`<div class="bad" style="font-size:11px">⚠ ${v.message}</div>`).join("");
+}
+
+function renderAlarms(a){
+  $("alarms").innerHTML = (a.alarms||[]).map(x=>
+    `<div class="alarm ${x.status}"><b>${x.kind}</b> ${x.message}
+     <span class="mono">${x.created_at}</span>
+     ${x.status==="open"?`<button onclick="ack('${x.id}')">确认</button>`:""}</div>`
+  ).join("") || "<span class='ok'>无告警</span>";
+}
+async function ack(id){ await api(`/api/ballast/${VID}/alarms/${id}/ack`, {}); loadAll(); }
+
+function renderSteps(p){
+  $("planInfo").textContent = p.revision?`r${p.revision}（${p.reason||""}）`:"无方案";
+  $("steps").innerHTML = (p.steps||[]).map(s=>{
+    const cond = s.start_condition||{};
+    return `<div class="step ${s.status}">
+      <b>#${s.seq}</b> ${s.source_tank} → ${s.target_tank}
+      <b>${s.target_volume}m³</b> ±${s.tolerance}
+      <span class="tag ${s.status}">${s.status}</span>
+      <span class="tag">阶段${s.stage}</span>
+      ${s.transferred?`<span class="tag">已转移 ${s.transferred}m³</span>`:""}
+      <div class="mono" style="margin:4px 0">泵 ${s.pump_id} 阀 [${(s.valves||[]).join(",")}]
+        管 [${(s.pipes||[]).join(",")}]<br>
+        开始条件: 上一步=${cond.previous_step??"-"} 已装≥${cond.confirmed_weight_gte}t</div>
+      <div class="row">
+        <button class="go" onclick="execAction('start',{token:tok(),seq:${s.seq},revision:${p.revision}})">启动</button>
+        <button onclick="execAction('pause',{token:tok()})">暂停</button>
+        <button onclick="execAction('resume',{token:tok()})">继续</button>
+        <button class="go" onclick="execAction('confirm',{token:tok(),seq:${s.seq}})">确认</button>
+      </div></div>`;
+  }).join("") || "尚未生成方案";
+}
+
+function renderRes(r){
+  $("resources").innerHTML = `<table><tr><th>泵组</th><th>状态</th><th>持有者</th></tr>`+
+    r.pumps.map(p=>`<tr><td>${p.pump_id} (${p.rate}m³/h)</td>
+      <td class="${p.occupied?'warn':'ok'}">${p.occupied?"占用":"空闲"}</td>
+      <td>${p.held_by||""}${p.held_by_step?" (步骤)":""}</td></tr>`).join("")+
+    `</table><div class="mono">运行步骤: ${r.running_step??"-"}<br>
+     在用阀: ${(r.valves_in_use||[]).join(", ")||"-"}<br>
+     在用管: ${(r.pipes_in_use||[]).join(", ")||"-"}</div>`;
+  $("seizePump").innerHTML = r.pumps.map(p=>`<option>${p.pump_id}</option>`).join("");
+}
+
+function renderRevs(r){
+  $("revisions").innerHTML = `<table><tr><th>修订</th><th>状态</th><th>步骤</th>
+    <th>已确认量</th><th>原因</th></tr>`+
+    (r.revisions||[]).map(x=>`<tr><td>r${x.revision}</td><td>${x.status}</td>
+      <td class="mono">${JSON.stringify(x.steps_by_status)}</td>
+      <td>${x.confirmed_volume}m³</td><td>${x.reason||""}</td></tr>`).join("")+
+    "</table>";
+}
+
+function renderEvents(e){
+  $("events").innerHTML = (e.events||[]).map(x=>
+    `<div><span class="mono">#${x.id} ${x.created_at}</span>
+     <b>${x.action}</b> ${x.actor||""}
+     <span class="mono">${JSON.stringify(x.detail).slice(0,140)}</span></div>`).join("");
+}
+
+function renderCps(c){
+  $("checkpoints").innerHTML = (c.checkpoints||[]).slice(0,8).map(x=>
+    `<div>#${x.id} ${x.created_at} r${x.state.revision}
+     运行=${x.state.steps.filter(s=>s.status==="running").map(s=>s.seq).join(",")||"-"}
+     占用=${x.state.seizures.map(s=>s.pump).join(",")||"-"}</div>`).join("");
+}
+
+$("vid").addEventListener("keydown", e=>{ if(e.key==="Enter") loadAll(); });
+</script>
+</body>
+</html>
