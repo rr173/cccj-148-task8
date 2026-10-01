@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>压载水联动执行台</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         margin: 0; background: #f4f6f9; color: #1f2933; }
+  header { background: #0f2f4d; color: #fff; padding: 13px 22px; display:flex;
+           align-items:center; gap:14px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  header input, header select { padding: 5px 8px; border-radius: 4px; border: none; }
+  header button { padding: 6px 12px; border: none; border-radius: 4px;
+                  background: #2f7ed8; color: #fff; cursor: pointer; }
+  .tabs { display:flex; gap:2px; background:#0f2f4d; padding:0 22px; }
+  .tabs button { background:#16415f; color:#cfe0ef;
+                 border:none; padding:8px 18px; cursor:pointer; font-size:13px;
+                 border-radius: 6px 6px 0 0; }
+  .tabs button.on { background:#f4f6f9; color:#0f2f4d; font-weight:600; }
+  .wrap { padding: 18px 22px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .card { background: #fff; border-radius: 8px; padding: 14px 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; display:flex;
+             justify-content:space-between; align-items:center; gap:8px; }
+  .badge { background:#e4edf9; color:#234; border-radius:10px;
+           padding:1px 9px; font-size:12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 7px; border-bottom: 1px solid #eef1f5;
+           vertical-align: top; }
+  th { color: #6b7684; font-weight: 600; background:#fafbfd; }
+  .pill { border-radius: 4px; padding: 1px 7px; font-size: 11px; white-space:nowrap; }
+  .pending { background:#e6e8eb; color:#555; }
+  .running { background:#dce9fb; color:#1c4d8e; }
+  .paused  { background:#fdeccb; color:#8a5a00; }
+  .confirmed { background:#d9f2e3; color:#176c3a; }
+  .frozen  { background:#e0dff5; color:#443b8a; }
+  .critical { background:#fbdcdc; color:#9b1c1c; }
+  .warning  { background:#fdeccb; color:#8a5a00; }
+  .info     { background:#dce9fb; color:#1c4d8e; }
+  button.act { margin:1px 2px 1px 0; padding:2px 8px; font-size:11.5px;
+               border:1px solid #c3ccd8; border-radius:4px; background:#fff;
+               cursor:pointer; }
+  button.act.go { background:#2f7ed8; color:#fff; border-color:#2f7ed8; }
+  button.act.warn { background:#e0a92e; color:#fff; border-color:#e0a92e; }
+  button.act.ok { background:#2f9e58; color:#fff; border-color:#2f9e58; }
+  .wide { grid-column: 1 / -1; }
+  input.slot { width: 70px; padding:2px 4px; font-size:11.5px; }
+  #msg { position:fixed; bottom:16px; right:16px; background:#0f2f4d;
+         color:#fff; padding:9px 14px; border-radius:6px; font-size:13px;
+         display:none; max-width: 460px; z-index: 99; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:11.5px; }
+  .ok { color:#176c3a; } .bad { color:#9b1c1c; }
+  .bar { height: 8px; background:#e6e8eb; border-radius:4px; overflow:hidden;
+         min-width:80px; }
+  .bar > div { height:100%; background:#2f7ed8; }
+  .tabpane { display:none; } .tabpane.on { display:block; }
+  textarea { width:100%; font-family: ui-monospace, Menlo, Consolas, monospace;
+             font-size:11.5px; border:1px solid #c3ccd8; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>压载水联动执行台</h1>
+  <label style="font-size:12px">API
+    <input id="api" value="http://127.0.0.1:8091" size="20"></label>
+  <label style="font-size:12px">航次
+    <input id="vid" placeholder="voyage_id" size="18"></label>
+  <label style="font-size:12px">方案
+    <input id="pid" placeholder="plan_id（可空=最新）" size="30"></label>
+  <label style="font-size:12px">值班员
+    <input id="op" value="officer_a" size="10"></label>
+  <button onclick="refreshAll()">刷新</button>
+</header>
+<div class="tabs">
+  <button class="on" onclick="showTab('plan',this)">方案时间线</button>
+  <button onclick="showTab('stab',this)">实时稳性</button>
+  <button onclick="showTab('topo',this)">压载拓扑</button>
+  <button onclick="showTab('lease',this)">泵阀占用</button>
+  <button onclick="showTab('alert',this)">偏差告警</button>
+  <button onclick="showTab('hist',this)">事件/修订</button>
+  <button onclick="showTab('setup',this)">录入与装船</button>
+</div>
+<div class="wrap">
+
+<!-- 方案时间线 -->
+<div class="tabpane on" id="tab-plan">
+  <div class="cols3">
+    <div class="card"><h2>阶段稳性</h2><div id="phases"></div></div>
+    <div class="card"><h2>总水量守恒</h2><div id="water"></div></div>
+    <div class="card"><h2>操作</h2>
+      <div style="font-size:12px;line-height:1.9">
+        令牌自动生成；同令牌重发回放首次结果。<br>
+        反馈按实测源/目标舱液位核对转移量。<br>
+        <button class="act warn" onclick="runAll(0)">自动顺序执行（反馈+确认）</button>
+      </div>
+    </div>
+  </div>
+  <div class="card"><h2>分阶段调水步骤
+      <span><span class="badge" id="planmeta"></span></span></h2>
+    <table id="t-steps"></table></div>
+</div>
+
+<!-- 实时稳性 -->
+<div class="tabpane" id="tab-stab">
+  <div class="cols">
+    <div class="card"><h2>当前实测液位</h2><div id="levels"></div></div>
+    <div class="card"><h2>稳性指标（按最新液位+装船重算）</h2>
+      <div id="stab"></div></div>
+  </div>
+</div>
+
+<!-- 拓扑 -->
+<div class="tabpane" id="tab-topo">
+  <div class="card"><h2>压载舱</h2><table id="t-tanks"></table></div>
+  <div class="cols">
+    <div class="card"><h2>泵组</h2><table id="t-pumps"></table></div>
+    <div class="card"><h2>阀门 / 互斥管段</h2><table id="t-valves"></table></div>
+  </div>
+</div>
+
+<!-- 泵阀占用 -->
+<div class="tabpane" id="tab-lease">
+  <div class="card"><h2>泵阀租约（同一资源仅一条 held）</h2>
+    <table id="t-leases"></table></div>
+</div>
+
+<!-- 告警 -->
+<div class="tabpane" id="tab-alert">
+  <div class="card"><h2>偏差告警</h2><table id="t-alerts"></table></div>
+</div>
+
+<!-- 历史 -->
+<div class="tabpane" id="tab-hist">
+  <div class="cols">
+    <div class="card"><h2>修订历史</h2><table id="t-revs"></table></div>
+    <div class="card"><h2>检查点</h2><table id="t-cps"></table></div>
+  </div>
+  <div class="card"><h2>事件账本（最近 200）</h2>
+    <table id="t-events"></table></div>
+</div>
+
+<!-- 录入 -->
+<div class="tabpane" id="tab-setup">
+  <div class="cols">
+    <div class="card"><h2>拓扑录入（JSON）</h2>
+      <textarea id="topo-in" rows="10"></textarea>
+      <div style="margin-top:6px">
+        <button class="act" onclick="loadDemoTopo()">填入示例拓扑</button>
+        <button class="act go" onclick="postTopo()">保存并激活</button>
+      </div></div>
+    <div class="card"><h2>装船进度 / 生成方案 / 修订</h2>
+      <div style="font-size:12.5px;line-height:2">
+        已装重量项 JSON：<textarea id="cargo-in" rows="4"
+>[{"w":400,"x":50,"y":-3,"z":15,"tag":"C01"},
+ {"w":400,"x":-50,"y":-2,"z":15,"tag":"C02"}]</textarea>
+        已装箱数 <input class="slot" id="loaded-n" value="2">
+        <button class="act" onclick="postLoading()">同步装船进度</button><br>
+        里程碑 JSON（label/cargo/expected_loaded_n）：<br>
+        <textarea id="ms-in" rows="6"></textarea><br>
+        <button class="act go" onclick="postPlan()">生成方案</button>
+        <button class="act warn" onclick="postRevise()">按当前方案生成修订</button>
+        <button class="act" onclick="recover()">触发恢复</button>
+      </div></div>
+  </div>
+</div>
+
+</div>
+<div id="msg"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let PLAN = null;
+function api(path, opts) {
+  return fetch($("api").value.replace(/\/$/,"") + path, opts)
+    .then(async r => ({ status: r.status, body: await r.json() }));
+}
+function flash(t, bad){ const m=$("msg"); m.textContent=t;
+  m.style.background = bad ? "#9b1c1c" : "#0f2f4d";
+  m.style.display="block"; setTimeout(()=>m.style.display="none", 3200); }
+function tok(prefix){ return prefix + "-" + Date.now() + "-" +
+  Math.random().toString(36).slice(2,8); }
+function esc(s){ return String(s ?? "").replace(/[&<>]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function showTab(name, btn){
+  document.querySelectorAll(".tabpane").forEach(p=>p.classList.remove("on"));
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("on"));
+  $("tab-"+name).classList.add("on"); btn.classList.add("on");
+  refreshAll();
+}
+
+async function refreshAll(){
+  await refreshPlan();
+  const tab = document.querySelector(".tabpane.on").id;
+  if (tab==="tab-stab") refreshStab();
+  if (tab==="tab-topo") refreshTopo();
+  if (tab==="tab-lease") refreshLeases();
+  if (tab==="tab-alert") refreshAlerts();
+  if (tab==="tab-hist") refreshHist();
+}
+
+async function refreshPlan(){
+  let pid = $("pid").value.trim();
+  try {
+    let r;
+    if (pid) r = await api("/ballast/plans/"+encodeURIComponent(pid));
+    else {
+      const revs = await api("/ballast/revisions");
+      const active = (revs.body.revisions||[]).find(x=>x.status==="active");
+      if (!active) { $("t-steps").innerHTML =
+          '<tr><td>尚无方案：先在「录入与装船」生成</td></tr>'; return; }
+      pid = active.id; r = await api("/ballast/plans/"+pid);
+    }
+    if (r.status !== 200) { $("t-steps").innerHTML =
+      `<tr><td class="bad">${esc(r.body.error?.code)}: ${esc(r.body.error?.message)}</td></tr>`;
+      return; }
+    PLAN = r.body.plan; $("pid").value = PLAN.plan_id;
+    renderPlan(PLAN);
+  } catch(e){ flash("刷新失败: "+e, true); }
+}
+
+function renderPlan(p){
+  $("planmeta").textContent =
+    `${p.plan_id} · 修订#${p.revision_no} · ${p.status}` +
+    (p.revision_of ? `（基于 ${p.revision_of.slice(-6)}）` : "");
+  $("phases").innerHTML = (p.phases||[]).map(ph=>{
+    const s=ph.stability;
+    return `<table>
+      <tr><th>${ph.phase} · ${esc(ph.milestone)}</th><th></th></tr>
+      <tr><td>横倾/纵倾</td><td class="${s.ok?'ok':'bad'}">${s.heel_deg}° / ${s.trim_m} m</td></tr>
+      <tr><td>艏/艉吃水</td><td>${s.draft_fwd} / ${s.draft_aft} m</td></tr>
+      <tr><td>GM_T / 弯矩</td><td>${s.gm_t} m / ${s.max_bending} t·m</td></tr>
+      <tr><td>调水量</td><td>${ph.movement} m³</td></tr></table><br>`;
+  }).join("");
+  const basis = p.basis?.volumes || {};
+  const baseTotal = Object.values(basis).reduce((a,b)=>a+b,0);
+  const confirmed = p.steps.filter(s=>s.status==="confirmed")
+    .reduce((a,s)=>a+s.transferred,0);
+  $("water").innerHTML = `
+    <table>
+    <tr><td>方案基准总水量</td><td class="mono">${baseTotal.toFixed(1)} m³</td></tr>
+    <tr><td>已确认转移量</td><td class="mono">${confirmed.toFixed(1)} m³（舱间转移，守恒）</td></tr>
+    <tr><td>方案终态总水量</td><td class="mono">${p.water_total} m³</td></tr>
+    <tr><td>守恒</td><td class="${Math.abs(baseTotal-p.water_total)<0.01?'ok':'bad'}">
+      ${Math.abs(baseTotal-p.water_total)<0.01 ? "✓ 相等" : "✗ 不守恒"}</td></tr></table>`;
+  $("t-steps").innerHTML =
+    `<tr><th>#</th><th>阶段</th><th>源舱→目标舱</th><th>目标/容差(m³)</th>
+     <th>已转移</th><th>泵/阀</th><th>开始条件</th><th>状态</th><th>操作</th></tr>` +
+    p.steps.map(s=>{
+      const pct = Math.min(100, 100*s.transferred/s.volume);
+      const res = (s.resources||[]).slice(0,5).join(",") +
+        ((s.resources||[]).length>5?"…":"");
+      const cond = s.start_condition;
+      const condTxt = cond.kind==="first_step" ? "里程碑达到" :
+        `#${cond.prev_seq} 已确认` +
+        (cond.expected_loaded_n?` / 装船≥${cond.expected_loaded_n}`:"");
+      let ops = "";
+      if (s.status==="pending" || s.status==="ready")
+        ops = `<button class="act go" onclick="cmd('${s.seq}','start')">启动</button>`;
+      if (s.status==="running")
+        ops = `<button class="act warn" onclick="cmd('${s.seq}','pause')">暂停</button>
+               <button class="act" onclick="fb('${s.seq}')">部分反馈</button>
+               <button class="act ok" onclick="fbAndConfirm('${s.seq}',1)">反馈+确认</button>`;
+      if (s.status==="paused")
+        ops = `<button class="act go" onclick="cmd('${s.seq}','resume')">恢复</button>
+               <button class="act ok" onclick="fbAndConfirm('${s.seq}',1)">反馈+确认</button>`;
+      return `<tr>
+        <td>${s.seq}</td><td>${s.phase}</td>
+        <td class="mono">${s.source_tank} → ${s.target_tank}</td>
+        <td>${svolume(s)}</td>
+        <td><div class="bar"><div style="width:${pct}%"></div></div>
+            <span class="mono">${s.transferred}</span></td>
+        <td class="mono" title="${esc((s.resources||[]).join(','))}">${s.pump}<br>
+            <small>${esc(res)}</small></td>
+        <td><small>${esc(condTxt)}</small></td>
+        <td><span class="pill ${s.status}">${s.status}</span></td>
+        <td>${ops}</td></tr>`;
+    }).join("");
+}
+function svolume(s){ return `${s.volume} ±${s.tolerance}`; }
+
+async function cmd(seq, command, token){
+  token = token || tok("cmd");
+  const r = await api("/ballast/command", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token, plan_id:PLAN.plan_id, step_seq:Number(seq),
+      command, operator_id:$("op").value})});
+  const res = r.body.result || r.body.error;
+  flash(`${command} #${seq}: ` + JSON.stringify(res), r.status>=400);
+  await refreshPlan();
+  return token;
+}
+
+async function fb(seq, fraction){
+  // 先取该步开始液位：用基准+已确认推算（调 /stability 近似，用页面已有数据）
+  const levels = (await api("/ballast/stability")).body.volumes;
+  const step = PLAN.steps.find(x=>x.seq===Number(seq));
+  const need = step.volume * (fraction ?? 0.5);
+  const r = await api("/ballast/feedback", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token:tok("fb"), plan_id:PLAN.plan_id,
+      step_seq:Number(seq),
+      observed_src: round3(levels[step.source_tank]-need),
+      observed_dst: round3(levels[step.target_tank]+need),
+      flow_rate: 11.5})});
+  const res = r.body.result || r.body.error;
+  flash(`反馈 #${seq}: ` + JSON.stringify(res), r.status>=400);
+  await refreshPlan();
+  return r;
+}
+async function fbAndConfirm(seq, fraction){
+  // 完整反馈：用方案基准逐步推算到当前步的开始液位
+  const start = startLevels(PLAN, Number(seq));
+  const step = PLAN.steps.find(x=>x.seq===Number(seq));
+  const q = step.volume * fraction;
+  const r = await api("/ballast/feedback", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token:tok("fb"), plan_id:PLAN.plan_id,
+      step_seq:Number(seq),
+      observed_src: round3(start.src-q),
+      observed_dst: round3(start.dst+q),
+      flow_rate: 11.8})});
+  if (r.status>=400){ flash(JSON.stringify(r.body.error), true); return; }
+  const cr = await api("/ballast/command", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token:tok("ok"), plan_id:PLAN.plan_id,
+      step_seq:Number(seq), command:"confirm", operator_id:$("op").value})});
+  const res = cr.body.result || cr.body.error;
+  flash(`确认 #${seq}: ` + (res.status||JSON.stringify(res).slice(0,160)),
+        cr.status>=400);
+  await refreshPlan();
+}
+function startLevels(plan, seq){
+  const v = {...plan.basis.volumes};
+  for (const s of plan.steps){
+    if (s.seq >= seq) break;
+    if (s.status==="confirmed"){
+      v[s.source_tank] -= s.transferred;
+      v[s.target_tank] += s.transferred;
+    }
+  }
+  const step = plan.steps.find(x=>x.seq===seq);
+  return {src:v[step.source_tank], dst:v[step.target_tank]};
+}
+function round3(x){ return Math.round(x*1000)/1000; }
+
+async function runAll(fromSeq){
+  if (!PLAN) return;
+  for (const s of PLAN.steps){
+    if (s.status!=="pending") continue;
+    await cmd(s.seq,"start");
+    await new Promise(r=>setTimeout(r,60));
+    await fbAndConfirm(s.seq,1);
+    await new Promise(r=>setTimeout(r,60));
+  }
+  flash("顺序执行完毕");
+}
+
+async function refreshStab(){
+  const r = await api("/ballast/stability");
+  if (r.status!==200) return;
+  const {volumes, stability:s} = r.body;
+  const top = (await api("/ballast/topology/"+r.body.topology_id)).body.payload;
+  const cap = {}; top.tanks.forEach(t=>cap[t.id]=t.max_vol);
+  $("levels").innerHTML = "<table><tr><th>舱</th><th>体积</th><th>液位/上限</th></tr>" +
+    Object.entries(volumes).map(([k,v])=>`
+      <tr><td class="mono">${k}</td><td class="mono">${v.toFixed(1)}</td>
+      <td><div class="bar"><div style="width:${100*v/cap[k]}%"></div></div>
+      <small>${(100*v/cap[k]).toFixed(0)}%</small></td></tr>`).join("") + "</table>";
+  $("stab").innerHTML = `<table>
+    <tr><td>横倾</td><td class="${Math.abs(s.heel_deg)<=top.ship.max_heel_deg?'ok':'bad'}">${s.heel_deg}°</td></tr>
+    <tr><td>纵倾差</td><td>${s.trim_m} m</td></tr>
+    <tr><td>艏/艉吃水</td><td>${s.draft_fwd} / ${s.draft_aft} m</td></tr>
+    <tr><td>GM_T / GM_L</td><td>${s.gm_t} / ${s.gm_l} m</td></tr>
+    <tr><td>排水量 / 最大弯矩</td><td>${s.displacement} t / ${s.max_bending} t·m</td></tr>
+    <tr><td>结论</td><td class="${s.ok?'ok':'bad'}">${s.ok?"✓ 全部限值通过":
+      "✗ "+s.violations.map(v=>v.kind).join(",")}</td></tr></table>`;
+}
+
+async function refreshTopo(){
+  const list = (await api("/ballast/topology")).body.topologies||[];
+  const act = list.find(t=>t.active); if(!act){$("t-tanks").innerHTML=
+    '<tr><td>尚无拓扑</td></tr>';return;}
+  const p = (await api("/ballast/topology/"+act.id)).body.payload;
+  $("t-tanks").innerHTML = "<tr><th>舱</th><th>x/y</th><th>容量</th><th>安全区间</th><th>初始</th></tr>" +
+    p.tanks.map(t=>`<tr><td class="mono">${t.id}<br><small>${esc(t.name)}</small></td>
+      <td>${t.x}/${t.y}</td><td>${t.capacity}</td>
+      <td>${t.min_vol} ~ ${t.max_vol}</td><td>${t.initial_vol}</td></tr>`).join("");
+  $("t-pumps").innerHTML = "<tr><th>泵</th><th>额定流量</th><th>吸口→排口</th></tr>" +
+    p.pumps.map(u=>`<tr><td class="mono">${u.id}</td><td>${u.rate} m³/min</td>
+      <td class="mono">${u.suction_node} → ${u.delivery_node}</td></tr>`).join("");
+  $("t-valves").innerHTML = "<tr><th>阀</th><th>连接</th><th>互斥组</th></tr>" +
+    p.valves.map(v=>`<tr><td class="mono">${v.id}</td>
+      <td class="mono">${v.node_a} ↔ ${v.node_b}</td>
+      <td>${v.mutex_group?`<span class="pill warning">${v.mutex_group}</span>`:""}</td></tr>`)
+    .join("");
+}
+
+async function refreshLeases(){
+  const r = await api("/ballast/leases");
+  const rows = r.body.leases||[];
+  $("t-leases").innerHTML = "<tr><th>资源</th><th>方案</th><th>步骤</th><th>值班员</th><th>状态</th></tr>" +
+    rows.map(l=>`<tr><td class="mono">${l.resource}</td>
+      <td class="mono">${esc(l.plan_id.slice(-8))}</td><td>${l.step_seq}</td>
+      <td>${l.operator_id}</td><td><span class="pill ${l.status==='held'?'running':'confirmed'}">${l.status}</span></td></tr>`)
+    .join("");
+}
+
+async function refreshAlerts(){
+  const rows = (await api("/ballast/alerts")).body.alerts||[];
+  $("t-alerts").innerHTML = "<tr><th>#</th><th>级别</th><th>类型</th><th>内容</th><th>方案/步骤</th><th></th></tr>" +
+    rows.map(a=>`<tr><td>${a.id}</td>
+      <td><span class="pill ${a.severity}">${a.severity}</span></td>
+      <td>${a.kind}</td><td>${esc(a.message)}</td>
+      <td>${(a.plan_id||"").slice(-8)}#${a.step_seq??""}</td>
+      <td>${a.acked?"已确认":`<button class="act" onclick="ack(${a.id})">确认</button>`}</td></tr>`)
+    .join("");
+}
+async function ack(id){ await api("/ballast/alerts/"+id+"/ack",{method:"POST"});
+  refreshAlerts(); }
+
+async function refreshHist(){
+  const revs = (await api("/ballast/revisions")).body.revisions||[];
+  $("t-revs").innerHTML = "<tr><th>方案</th><th>#</th><th>状态</th><th>原因</th><th>基于</th></tr>" +
+    revs.map(r=>`<tr><td class="mono"><a href="#" onclick="$('pid').value='${r.id}';refreshPlan();return false">${r.id.slice(-10)}</a></td>
+      <td>${r.revision_no}</td><td><span class="pill ${r.status}">${r.status}</span></td>
+      <td>${esc(r.reason||"")}</td><td class="mono">${(r.revision_of||"").slice(-8)}</td></tr>`)
+    .join("");
+  const cps = (await api("/ballast/checkpoints")).body.checkpoints||[];
+  $("t-cps").innerHTML = "<tr><th>方案</th><th>更新时间</th><th>步骤/占用摘要</th></tr>" +
+    cps.map(c=>{const st=c.state.steps||{};
+      return `<tr><td class="mono">${c.plan_id.slice(-8)}</td><td><small>${c.updated_at}</small></td>
+      <td class="mono">${Object.entries(st).map(([k,v])=>k+":"+v.status[0]).join(" ")}</td></tr>`;
+    }).join("");
+  const evs = (await api("/ballast/events")).body.events||[];
+  $("t-events").innerHTML = "<tr><th>#</th><th>时间</th><th>事件</th><th>方案/步</th><th>详情</th></tr>" +
+    evs.map(e=>`<tr><td>${e.id}</td><td><small>${e.created_at.slice(11)}</small></td>
+      <td>${e.kind}</td><td>${(e.plan_id||"").slice(-8)}#${e.step_seq??""}</td>
+      <td class="mono" style="max-width:480px;word-break:break-all">${esc(JSON.stringify(e.detail||""))}</td></tr>`)
+    .join("");
+}
+
+async function loadDemoTopo(){
+  $("topo-in").value = JSON.stringify(DEMO_TOPO, null, 2);
+}
+async function postTopo(){
+  let body;
+  try { body = JSON.parse($("topo-in").value); }
+  catch(e){ return flash("拓扑 JSON 解析失败", true); }
+  const r = await api("/ballast/topology", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name:"console", topology:body})});
+  flash("拓扑: " + (r.body.topology_id || r.body.error?.code), r.status>=400);
+  if (r.status===200 && !$("vid").value){ /* 保持空航次 */ }
+}
+async function postLoading(){
+  const items = JSON.parse($("cargo-in").value);
+  const r = await api("/ballast/loading", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({voyage_id:$("vid").value||"voy_console",
+      loaded:items, loaded_n:Number($("loaded-n").value)})});
+  flash("装船进度已同步", r.status>=400);
+}
+async function postPlan(){
+  const ms = JSON.parse($("ms-in").value || "[]");
+  const r = await api("/ballast/plans", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({voyage_id:$("vid").value||"voy_console",
+      milestones: ms, max_step: 250})});
+  if (r.status===200){ $("pid").value=r.body.plan.plan_id; flash("方案已生成");
+    showTab('plan', document.querySelector('.tabs button')); refreshAll(); }
+  else flash("生成失败: " + JSON.stringify(r.body.error), true);
+}
+async function postRevise(){
+  if (!PLAN) return flash("先选择方案", true);
+  const ms = JSON.parse($("ms-in").value || "[]");
+  const r = await api("/ballast/plans/"+PLAN.plan_id+"/revise",
+    {method:"POST", headers:{"Content-Type":"application/json"},
+     body: JSON.stringify({reason:"console_revise",
+       operator_id:$("op").value, milestones: ms})});
+  if (r.status===200){ $("pid").value=r.body.plan.plan_id; flash("修订已生成，旧步骤已冻结");
+    refreshAll(); }
+  else flash("修订失败: " + JSON.stringify(r.body.error), true);
+}
+async function recover(){
+  const r = await api("/ballast/recover",{method:"POST"});
+  flash("恢复: " + JSON.stringify(r.body.recovered.actions));
+  refreshAll();
+}
+
+const cap0 = 14*14*9.5;
+const DEMO_TOPO = {
+  ship:{length:180,beam:32,lightship_w:15000,lightship_x:-5,lightship_z:9,
+        max_heel_deg:2.0,max_trim_m:1.2,min_draft:3.0,max_draft:12.0,
+        max_bending_moment:4000000,min_gm:0.3,max_gm:25},
+  tanks:[["WBP","左艏压载舱",62,-11],["EBP","右艏压载舱",62,11],
+         ["WBS","左艉压载舱",-62,-11],["EBS","右艉压载舱",-62,11],
+         ["WBM","左舯压载舱",0,-12],["EBM","右舯压载舱",0,12]]
+    .map(([id,name,x,y])=>({id,name,x,y,z_bottom:0.5,z_top:10,length:14,width:14,
+      capacity:cap0,min_vol:80,max_vol:Math.round(cap0*0.98*100)/100,initial_vol:700})),
+  pumps:[{id:"P1",name:"1号压载泵",rate:12,suction_node:"SUC",delivery_node:"DEL"},
+         {id:"P2",name:"2号压载泵",rate:10,suction_node:"SUC2",delivery_node:"DEL2"}],
+  valves:[].concat(...[["WBP","EBP","WBS","EBS","WBM","EBM"]].flat()
+    .map(i=>[{id:"VS_"+i,node_a:"T:"+i,node_b:"SUC"},
+             {id:"VD_"+i,node_a:"T:"+i,node_b:"DEL"},
+             {id:"VS2_"+i,node_a:"T:"+i,node_b:"SUC2"},
+             {id:"VD2_"+i,node_a:"T:"+i,node_b:"DEL2"}]))
+    .concat([{id:"VC_S",node_a:"SUC",node_b:"SUC2",mutex_group:"CROSS"},
+             {id:"VC_D",node_a:"DEL",node_b:"DEL2",mutex_group:"CROSS"}])
+};
+$("ms-in").value = JSON.stringify([
+  {label:"30%装船", expected_loaded_n:2, cargo:[
+    {w:400,x:50,y:-3,z:15,tag:"C01"},{w:400,x:-50,y:-2,z:15,tag:"C02"}]},
+  {label:"60%装船", expected_loaded_n:5, cargo:[
+    {w:400,x:50,y:-3,z:15},{w:400,x:-50,y:-2,z:15},
+    {w:500,x:55,y:4,z:16},{w:500,x:-30,y:4,z:16},{w:400,x:10,y:-3,z:16}]},
+  {label:"100%装船", expected_loaded_n:7, cargo:[
+    {w:400,x:50,y:-3,z:15},{w:400,x:-50,y:-2,z:15},
+    {w:500,x:55,y:4,z:16},{w:500,x:-30,y:4,z:16},{w:400,x:10,y:-3,z:16},
+    {w:500,x:20,y:4,z:16},{w:400,x:-55,y:-1,z:16}]}
+], null, 2);
+
+refreshAll();
+setInterval(()=>{ const t=document.querySelector(".tabpane.on").id;
+  if (["tab-plan","tab-stab","tab-lease","tab-alert"].includes(t)) refreshAll();
+}, 8000);
+</script>
+</body>
+</html>
